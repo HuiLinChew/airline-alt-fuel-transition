@@ -2,54 +2,71 @@
 
 Whether each aircraft type can fly each leg, its fuel burn and turn time.
 Output: perf with one row per (type, leg): feasible, fuel_kg, energy_gj, co2_t,
-block_h, turn_h.
+block_min, turn_min.
 
 Methods
 - Range: feasible only if leg distance <= type range (Kamat et al.; Sirtori et al.).
 - Fuel: refuel before every departure, so the fuel must be offered at the
   origin (Wu et al. 2025, rule that LH2 aircraft use LH2 airports). No tankering yet.
-- Fuel burn: linear fit vs distance per type (planning sheet; fit to Henry's curves).
+- Fuel burn: from fuel_burn.csv (interpolated) if the type has a table there,
+  otherwise the linear fit fixed + per_km x distance in aircraft_types.csv.
 - Block time: taken from the schedule (same for every type on a leg).
-- Turn time: base turn (Akinola et al. 2025) plus, for LH2, the extra refuelling
-  time from Al-Timimi's equations: plug in/out + fuel mass / pump flow.
+- Turn time: base turn (Akinola et al. 2025) plus, if refuelling is on the critical
+  path, the extra refuelling time vs the reference type (Al-Timimi):
+  refuel time = plug in/out + fuel mass / (pumps x flow per pump).
 """
 
+import warnings
+
+import numpy as np
 import pandas as pd
 
 from .data_layer import Data
 from .scenario_config import Scenario
 
-# Al-Timimi refuelling-time parameters, narrowbody (2 pumps); minutes and kg/s
-REFUEL = {"lh2": dict(plug_min=5 + 4, flow_kg_s=2 * 5.0),
-          "kerosene": dict(plug_min=2 + 2, flow_kg_s=2 * 20.0)}
+
+def fuel_kg(data: Data, ac_type: str, distance_km: float) -> float:
+    table = data.fuel_burn[data.fuel_burn.type == ac_type].sort_values("distance_km")
+    if len(table):
+        if distance_km > table.distance_km.max():
+            return float("nan")                      # beyond the table: no data, treat as infeasible
+        return float(np.interp(distance_km, table.distance_km, table.fuel_kg))
+    ac = data.aircraft_types.loc[ac_type]
+    return ac.fuel_kg_fixed + ac.fuel_kg_per_km * distance_km
 
 
-def refuel_min(fuel: str, kg: float) -> float:
-    p = REFUEL.get(fuel, REFUEL["kerosene"])  # no methane data yet: treat as kerosene
-    return p["plug_min"] + kg / p["flow_kg_s"] / 60
+def refuel_min(data: Data, ac_type: str, kg: float) -> float:
+    """Refuelling time in minutes; NaN if the fuel has no refuelling data."""
+    ac = data.aircraft_types.loc[ac_type]
+    f = data.fuels.loc[ac.fuel]
+    return f.refuel_plug_min + kg / (ac.refuel_pumps * f.refuel_flow_kg_s_per_pump) / 60
 
 
 def perf(data: Data, airport_fuel: pd.DataFrame, sc: Scenario) -> pd.DataFrame:
-    ker = data.aircraft_types[data.aircraft_types.fuel == "kerosene"].iloc[0]  # reference type
-    rows = []
+    ref = sc.reference_type
+    rows, no_refuel_data = [], set()
     for ac_type, ac in data.aircraft_types.iterrows():
         if sc.fleet.get(ac_type, 0) == 0:
             continue                                   # type not in this scenario's fleet
         f = data.fuels.loc[ac.fuel]
         for leg_id, leg in data.legs.iterrows():
-            fuel_kg = ac.fuel_kg_fixed + ac.fuel_kg_per_km * leg.distance_km
+            kg = fuel_kg(data, ac_type, leg.distance_km)
             extra = 0.0
-            if sc.refuel_on_critical_path and ac.fuel != "kerosene":
-                ker_kg = ker.fuel_kg_fixed + ker.fuel_kg_per_km * leg.distance_km
-                extra = max(0.0, refuel_min(ac.fuel, fuel_kg) - refuel_min("kerosene", ker_kg))
+            if sc.refuel_on_critical_path and ac_type != ref:
+                extra = refuel_min(data, ac_type, kg) - refuel_min(data, ref, fuel_kg(data, ref, leg.distance_km))
+                if np.isnan(extra):
+                    no_refuel_data.add(ac_type)
+                    extra = 0.0
             rows.append(dict(
                 type=ac_type, leg_id=leg_id, fuel=ac.fuel, seats=ac.seats,
-                feasible=(leg.distance_km <= ac.range_km
-                          and airport_fuel.loc[(leg.origin, ac.fuel), "available"]),
-                fuel_kg=fuel_kg,
-                energy_gj=fuel_kg * f.lhv_mj_per_kg / 1000,
-                co2_t=fuel_kg * f.co2_kg_per_kg / 1000,
-                block_h=leg.arr_h - leg.dep_h,
-                turn_h=(ac.turn_min + extra) / 60,
+                feasible=bool(leg.distance_km <= ac.range_km and not np.isnan(kg)
+                              and airport_fuel.loc[(leg.origin, ac.fuel), "available"]),
+                fuel_kg=kg,
+                energy_gj=kg * f.lhv_mj_per_kg / 1000,
+                co2_t=kg * f.co2_kg_per_kg / 1000,
+                block_min=int(leg.arr_min - leg.dep_min),
+                turn_min=int(round(ac.turn_min + max(0.0, extra))),
             ))
+    for ac_type in sorted(no_refuel_data):
+        warnings.warn(f"no refuelling data for {ac_type}'s fuel: no extra turn time added")
     return pd.DataFrame(rows).set_index(["type", "leg_id"]).sort_index()

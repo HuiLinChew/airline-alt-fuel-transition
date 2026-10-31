@@ -5,3 +5,4 @@ objective: cost
 fleet: {KER-NB: 30, LH2-NB: 6, CH4-NB: 6}
 fuel_max_tier: {lh2: 1, ch4: 2}
 carbon_price: 200
+sweep: {parameter: carbon_price, values: [0, 50, 100, 150, 200, 250, 300, 350, 400]}

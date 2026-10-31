@@ -24,7 +24,7 @@ STATIONS = ["LHR", "CDG", "AMS", "MAD", "DUB"]
 AIRLINE_SHARE = 0.15      # share of each route's passengers our airline carries
 SEATS = 180               # all three types share the same cabin (Hoelzen et al. 2025 design PAX)
 LOAD_FACTOR = 0.83        # max load factor (Rau et al. 2024)
-FIRST_DEP, LAST_ARR = 6.5, 22.5   # schedule window (hours)
+FIRST_DEP, LAST_ARR = 390, 1350  # schedule window, minutes after midnight (06:30-22:30)
 TIER = {"INT": 1, "MAJ": 2, "SMA": 3}   # placeholder until the tier 1-6 mapping is defined
 
 
@@ -53,29 +53,33 @@ def build_legs():
     pax = {(r.o, r.d): r.base_pax_demand * AIRLINE_SHARE / 365 for r in seg.itertuples()}
     km = {(r.o, r.d): r.stage_length_km for r in seg.itertuples()}
 
+    def to5(minutes):                       # round to 5 minutes
+        return int(round(minutes / 5) * 5)
+
     rows = []
     for o, d in sorted(pax):
         if o > d:          # handle each pair once, from its alphabetically first station
             continue
-        block = round((km[o, d] / 830 + 0.5) * 12) / 12            # cruise 830 km/h + 30 min, to 5 min
+        block = to5(km[o, d] / 830 * 60 + 30)                     # cruise 830 km/h + 30 min
         freq = math.ceil(max(pax[o, d], pax[d, o]) / (SEATS * LOAD_FACTOR))
-        span = LAST_ARR - FIRST_DEP - 2 * block - 1                # room for out + 1 h + back
+        span = LAST_ARR - FIRST_DEP - 2 * block - 60               # room for out + 1 h + back
         for k in range(freq):
-            dep = FIRST_DEP + (span * k / max(freq - 1, 1) if freq > 1 else span / 2)
-            dep = round(dep * 12) / 12
-            back = dep + block + 1
+            dep = to5(FIRST_DEP + (span * k / (freq - 1) if freq > 1 else span / 2))
+            back = dep + block + 60
             for a, b, t in [(o, d, dep), (d, o, back)]:
-                rows.append(dict(origin=a, destination=b, dep_h=t, arr_h=t + block,
-                                 distance_km=km[a, b], pax=round(pax[a, b] / freq)))
-    legs = pd.DataFrame(rows).sort_values(["dep_h", "origin"]).reset_index(drop=True)
+                rows.append(dict(origin=a, destination=b, dep_min=t, arr_min=t + block,
+                                 distance_km=round(km[a, b], 1), pax=round(pax[a, b] / freq)))
+    legs = pd.DataFrame(rows).sort_values(["dep_min", "origin"]).reset_index(drop=True)
     legs.insert(0, "leg_id", [f"L{i:03d}" for i in range(len(legs))])
-    return legs.round({"dep_h": 3, "arr_h": 3, "distance_km": 1})
+    return legs
 
 
 def build_aircraft_types():
     """Fuel burn is a linear fit (fixed + per km) to Henry's short-haul range-fuel
     curves as used by Hasan (aircraft_data.csv, R^2 > 0.999 over 0-3000 km).
-    Methane: kerosene energy +10% (Rompokos et al. 2020) at LHV 50 MJ/kg."""
+    Methane: kerosene energy +10% (Rompokos et al. 2020) at LHV 50 MJ/kg.
+    Refuel pumps: narrowbody = 2 (Al-Timimi, after FlyZero). Hourly cost: placeholder.
+    A type can instead use a burn-vs-distance table in fuel_burn.csv (see README)."""
     curves = read(RAW / "aircraft_data.csv")
     curves = curves[curves.range_km <= 3000]
     fit = {c: np.polyfit(curves.range_km, curves[c], 1) for c in ["ker_sh", "lh2_sh"]}
@@ -83,13 +87,16 @@ def build_aircraft_types():
     lh2_per_km, lh2_fixed = fit["lh2_sh"]
     ch4 = 1.10 * 43.2 / 50.0   # kerosene kg -> methane kg at +10% energy
     return pd.DataFrame([
-        dict(type="KER-NB", fuel="kerosene", seats=SEATS, range_km=6000, turn_min=40,
+        dict(type="KER-NB", fuel="kerosene", seats=SEATS, max_load_factor=LOAD_FACTOR,
+             range_km=6000, turn_min=40, refuel_pumps=2, cost_per_block_hour=3000,
              fuel_kg_fixed=ker_fixed, fuel_kg_per_km=ker_per_km,
              source="A320-class; fuel: Sanford/Al-Timimi SH curve; turn: Akinola et al. 2025"),
-        dict(type="LH2-NB", fuel="lh2", seats=SEATS, range_km=2778, turn_min=40,
+        dict(type="LH2-NB", fuel="lh2", seats=SEATS, max_load_factor=LOAD_FACTOR,
+             range_km=2778, turn_min=40, refuel_pumps=2, cost_per_block_hour=3000,
              fuel_kg_fixed=lh2_fixed, fuel_kg_per_km=lh2_per_km,
              source="Hoelzen et al. 2025 SA-1500 (1500 NM); fuel: Sanford/Al-Timimi SH curve"),
-        dict(type="CH4-NB", fuel="ch4", seats=SEATS, range_km=5000, turn_min=40,
+        dict(type="CH4-NB", fuel="ch4", seats=SEATS, max_load_factor=LOAD_FACTOR,
+             range_km=5000, turn_min=40, refuel_pumps=2, cost_per_block_hour=3000,
              fuel_kg_fixed=ker_fixed * ch4, fuel_kg_per_km=ker_per_km * ch4,
              source="Rompokos et al. 2020 LNG 737-800 retrofit (+10% energy); range approx."),
     ]).round(4)

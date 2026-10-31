@@ -42,7 +42,7 @@ Modules follow the planning sheet:
 | 8 | Rotation checker | `rotation_checker.py` |
 | 9 | Analysis | `analysis.py`, `plots.py` |
 
-Full walk-through: `docs/code_guide.md`. Sources for every method and number: `docs/methods.md`.
+Full walk-through and every scenario setting: `docs/code_guide.md`. Sources for every method and number: `docs/methods.md`.
 
 ## First results (dummy data)
 

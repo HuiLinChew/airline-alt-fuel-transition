@@ -1,8 +1,8 @@
 """Module 9 - Analysis.
 
 Runs the chain for each scenario and compares it with the baseline.
-Outputs: per-scenario results, a summary table of deltas vs baseline, and a
-carbon-price sweep (sensitivity). Comparing against an all-kerosene reference is
+Outputs: per-scenario results, a summary table of deltas vs baseline, and
+parameter sweeps (sensitivity). Comparing against an all-kerosene reference is
 the standard way results are reported (Peter, Sirtori, Kamat, Kinene).
 
 Chain:  data_layer -> airport_capability -> aircraft_performance -> cost_revenue
@@ -15,13 +15,15 @@ import pandas as pd
 
 from . import (aircraft_performance, airport_capability, cost_revenue, network_builder,
                optimiser, rotation_checker)
-from .data_layer import Data
-from .scenario_config import Scenario
+from .data_layer import Data, apply_overrides, load_data
+from .scenario_config import Scenario, validate
 
 
 @dataclass
 class Run:
     scenario: Scenario
+    data: Data                # the data after this scenario's overrides
+    airport_fuel: pd.DataFrame
     perf: pd.DataFrame        # perf with costs, (type, leg) rows
     result: optimiser.Result
     rotations: pd.DataFrame
@@ -30,20 +32,22 @@ class Run:
     kpis: dict
 
 
-def run(data: Data, sc: Scenario) -> Run:
+def run(sc: Scenario, data: Data = None) -> Run:
+    """Run one scenario. Loads its data folder unless data is passed in."""
+    data = data if data is not None else load_data(sc.data_path)
+    validate(sc, data)
+    data = apply_overrides(data, sc.aircraft_overrides, sc.fuel_overrides)
     fuel = airport_capability.airport_fuel(data, sc)
     perf = aircraft_performance.perf(data, fuel, sc)
     perf = cost_revenue.add_costs(perf, data, fuel, sc)
-    drop = cost_revenue.drop_cost(data, sc, perf)
-    net = network_builder.build_network(data, perf)
-    res = optimiser.solve(net, perf, drop, sc)
+    net = network_builder.build_network(data, perf, sc.period_min)
+    res = optimiser.solve(net, perf, cost_revenue.drop_cost(data, sc), sc)
     rot, viol = rotation_checker.build_rotations(data, perf, res.assign, sc.fleet)
     flown = perf.reset_index().merge(res.assign.reset_index(), on=["leg_id", "type"])
-    return Run(sc, perf, res, rot, viol, flown, kpis(data, flown, res))
+    return Run(sc, data, fuel, perf, res, rot, viol, flown, kpis(data, flown, res))
 
 
 def kpis(data: Data, flown: pd.DataFrame, res) -> dict:
-    ask = (flown.seats * data.legs.loc[flown.leg_id, "distance_km"].values).sum()
     out = dict(
         status=res.status,
         legs_flown=len(flown),
@@ -55,8 +59,8 @@ def kpis(data: Data, flown: pd.DataFrame, res) -> dict:
         carbon_cost_usd=flown.carbon_cost_usd.sum(),
         total_cost_usd=flown.cost_usd.sum(),
     )
-    for fuel in ["kerosene", "lh2", "ch4"]:
-        out[f"share_{fuel}"] = (flown.fuel == fuel).mean() if len(flown) else 0
+    for fuel in data.fuels.index:
+        out[f"share_{fuel}"] = (flown.fuel == fuel).mean() if len(flown) else 0.0
     return out
 
 
@@ -71,10 +75,12 @@ def compare(runs: list[Run]) -> pd.DataFrame:
     return table
 
 
-def carbon_price_sweep(data: Data, sc: Scenario, prices=range(0, 401, 50)) -> pd.DataFrame:
-    """Re-run one scenario across carbon prices (a parameter 'disturbance')."""
+def sweep(sc: Scenario, parameter: str, values, data: Data = None) -> pd.DataFrame:
+    """Re-run one scenario for each value of one top-level setting, e.g.
+    sweep(sc, "carbon_price", range(0, 401, 50)) or sweep(sc, "fleet", [{...}, {...}])."""
+    data = data if data is not None else load_data(sc.data_path)
     rows = []
-    for p in prices:
-        k = run(data, replace(sc, carbon_price=float(p))).kpis
-        rows.append(dict(carbon_price=p, **k))
+    for v in values:
+        k = run(replace(sc, **{parameter: v}), data).kpis
+        rows.append({parameter: v if isinstance(v, (int, float, str)) else str(v), **k})
     return pd.DataFrame(rows)

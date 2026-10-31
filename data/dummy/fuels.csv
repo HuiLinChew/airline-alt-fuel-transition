@@ -1,4 +1,4 @@
-fuel,co2_g_per_mj,price_usd_per_gj
-kerosene,89,18
-lh2,10,45
-ch4,75,12
+fuel,lhv_mj_per_kg,co2_kg_per_kg,price_usd_per_kg,source
+kerosene,43.2,3.16,0.60,"LHV standard; CO2 combustion factor as Al-Timimi (3.16); price at dispenser Hoelzen et al. 2025"
+lh2,120.0,0.00,2.50,"LHV standard; zero tank-to-wake CO2; price mid of 2-3 USD/kg at main European airports 2050 (Hoelzen et al. 2025)"
+ch4,50.0,2.75,1.46,"LHV standard; CO2 from CH4 stoichiometry (44/16); price = LH2 price x Raab et al. 2024 e-LCH4/e-LH2 cost ratio (220/157 per MWh)"

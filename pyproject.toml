@@ -1,5 +1,5 @@
 [project]
-name = "altfleet"
+name = "altfuel"
 version = "0.1.0"
 description = "Airline network fleet-transition model for alternative fuels (kerosene, LH2, methane)"
 readme = "README.md"
@@ -14,6 +14,7 @@ dependencies = [
     "numpy>=2.5.4",
     "pandas>=3.1.0",
     "pulp>=2.9,<3",
+    "pyyaml>=6.0.3",
 ]
 
 [build-system]

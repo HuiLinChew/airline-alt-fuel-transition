@@ -1,0 +1,6 @@
+# Upper bound on decarbonisation with this fleet and these airports.
+name: alt_min_co2
+description: LH2 and CH4 aircraft available, minimise CO2
+objective: co2
+fleet: {KER-NB: 30, LH2-NB: 6, CH4-NB: 6}
+fuel_max_tier: {lh2: 1, ch4: 2}

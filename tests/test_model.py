@@ -1,40 +1,44 @@
-from altfleet.data import daily_demand, load_inputs
-from altfleet.rotations import build_rotations
-from altfleet.scenarios import SCENARIOS, apply
-from altfleet.model import solve
+import pytest
+
+from altfuel import analysis
+from altfuel.data_layer import load_data
+from altfuel.scenario_config import load_scenario
 
 
-def _solved(name):
-    inp = load_inputs()
-    sc = next(s for s in SCENARIOS if s.name == name)
-    i = apply(inp, sc)
-    return i, solve(i, sc.objective)
+@pytest.fixture(scope="module")
+def data():
+    return load_data()
 
 
-def test_all_passengers_served_and_balanced():
-    inp, sol = _solved("alt_min_co2")
-    assert sol.status == "Optimal"
-    F = sol.flights
-    cap = (F.flights * F.pax_cap).groupby([F.origin, F.destination]).sum()
-    D = daily_demand(inp)
-    assert (cap.reindex(D.index, fill_value=0) >= D).all()
-    for k, g in F.groupby("type"):
-        dep = g.groupby("origin").flights.sum()
-        arr = g.groupby("destination").flights.sum()
-        assert dep.sub(arr, fill_value=0).abs().sum() == 0
+@pytest.fixture(scope="module")
+def run_co2(data):
+    return analysis.run(data, load_scenario("alt_min_co2"))
 
 
-def test_fuel_and_range_respected():
-    inp, sol = _solved("alt_min_co2")
-    F = sol.flights
-    for r in F.itertuples():
-        assert r.fuel in inp.airports.loc[r.origin, "fuels"]
-        assert r.distance_km <= inp.aircraft.loc[r.type, "range_km"]
+def test_every_leg_flown_exactly_once(data, run_co2):
+    assign = run_co2.result.assign
+    assert run_co2.result.status == "Optimal"
+    assert sorted(assign.index) == sorted(data.legs.index)
+    assert (assign.type != "dropped").all()           # allow_drop is false
 
 
-def test_rotations_cover_every_flight_within_curfew():
-    inp, sol = _solved("alt_min_co2")
-    legs, summary = build_rotations(inp, sol)
-    assert len(legs) == sol.flights.flights.sum()
-    assert (legs.arr_h <= inp.op_end_h + 1e-9).all()
-    assert summary.feasible_with_optimiser_fleet.all()
+def test_fuel_range_and_fleet_respected(data, run_co2):
+    sc = run_co2.scenario
+    for r in run_co2.flown.itertuples():
+        leg = data.legs.loc[r.leg_id]
+        ac = data.aircraft_types.loc[r.type]
+        assert leg.distance_km <= ac.range_km
+        if ac.fuel != "kerosene":
+            assert data.airports.loc[leg.origin, "tier"] <= sc.fuel_max_tier[ac.fuel]
+    for k, n in run_co2.result.fleet_used.items():
+        assert n <= sc.fleet[k]
+
+
+def test_rotations_cover_flown_legs_without_violations(run_co2):
+    assert len(run_co2.rotations) == run_co2.kpis["legs_flown"]
+    assert run_co2.violations == []
+
+
+def test_baseline_is_all_kerosene(data):
+    r = analysis.run(data, load_scenario("baseline"))
+    assert r.kpis["share_kerosene"] == 1.0

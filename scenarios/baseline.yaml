@@ -1,0 +1,6 @@
+# All-kerosene reference: what the airline does today.
+name: baseline
+description: Kerosene-only fleet, minimise operating cost, no carbon price
+objective: cost
+fleet: {KER-NB: 30}
+carbon_price: 0

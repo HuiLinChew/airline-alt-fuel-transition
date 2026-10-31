@@ -1,0 +1,8 @@
+# As alt_carbon_200, but the airline may drop legs that cost more than they earn.
+name: alt_carbon_200_drop
+description: As alt_carbon_200, but unprofitable legs may be dropped (placeholder fares)
+objective: cost
+fleet: {KER-NB: 30, LH2-NB: 6, CH4-NB: 6}
+fuel_max_tier: {lh2: 1, ch4: 2}
+carbon_price: 200
+allow_drop: true

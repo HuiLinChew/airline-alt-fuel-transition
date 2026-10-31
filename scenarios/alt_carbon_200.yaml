@@ -1,0 +1,7 @@
+# High EU ETS case from Hoelzen et al. (2025): 200 USD/tCO2.
+name: alt_carbon_200
+description: LH2 and CH4 aircraft available, minimise cost with a 200 USD/t carbon price
+objective: cost
+fleet: {KER-NB: 30, LH2-NB: 6, CH4-NB: 6}
+fuel_max_tier: {lh2: 1, ch4: 2}
+carbon_price: 200

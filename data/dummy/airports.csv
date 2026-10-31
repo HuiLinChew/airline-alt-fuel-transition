@@ -1,0 +1,6 @@
+iata,name,lat,lon,tier,fuels,daily_slots
+LHR,London Heathrow,51.4714,-0.4528,1,kerosene;lh2,24
+CDG,Paris Charles de Gaulle,49.0097,2.5486,1,kerosene;lh2;ch4,40
+AMS,Amsterdam Schiphol,52.3083,4.7681,1,kerosene;lh2;ch4,40
+MAD,Madrid Barajas,40.4736,-3.5611,2,kerosene;ch4,40
+DUB,Dublin,53.4325,-6.2522,3,kerosene;ch4,40

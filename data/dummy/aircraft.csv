@@ -1,0 +1,4 @@
+type,fuel,seats,max_load_factor,range_km,cruise_kmh,turnaround_min,fleet_max
+KER-NB,kerosene,180,0.85,6000,830,45,30
+LH2-NB,lh2,150,0.85,1300,780,75,0
+CH4-NB,ch4,170,0.85,4000,810,60,0

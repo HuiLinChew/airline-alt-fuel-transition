@@ -1,0 +1,9 @@
+scenario,type,aircraft_optimiser,tails_heuristic,block_h_per_tail,feasible_with_optimiser_fleet
+baseline,KER-NB,6,6,9.47,True
+alt_min_energy,KER-NB,6,6,9.47,True
+alt_min_co2,CH4-NB,3,3,8.98,True
+alt_min_co2,KER-NB,2,2,8.53,True
+alt_min_co2,LH2-NB,3,2,7.78,True
+alt_min_co2_lh2_mad_dub,CH4-NB,2,2,7.9,True
+alt_min_co2_lh2_mad_dub,KER-NB,1,1,10.0,True
+alt_min_co2_lh2_mad_dub,LH2-NB,4,4,9.14,True

@@ -168,9 +168,11 @@ def test_partial_capacity_share_is_rejected(data):
 
 def test_bad_input_data_is_rejected(data):
     legs = data.legs.copy()
-    legs.loc["L000", "arr_min"] = legs.loc["L000", "dep_min"] - 10
-    with pytest.raises(ValueError, match="arrives before"):
+    legs.loc["L000", "destination"] = "XXX"
+    with pytest.raises(ValueError, match="missing from airports.csv"):
         validate_data(replace(data, legs=legs))
+    with pytest.raises(ValueError, match="duplicate leg_id"):
+        validate_data(replace(data, legs=pd.concat([data.legs, data.legs.head(1)])))
 
 
 def test_overrides_change_the_inputs(data):

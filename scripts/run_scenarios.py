@@ -1,9 +1,6 @@
-"""Run every scenario in scenarios/ and write results and figures to outputs/.
+"""Run every scenario in scenarios/ and save the results and figures in outputs/.
 
     uv run scripts/run_scenarios.py
-
-A scenario with a `sweep:` block ({parameter: ..., values: [...]}) is also
-re-run across those values.
 """
 
 import matplotlib.pyplot as plt
@@ -12,33 +9,40 @@ from altfuel import analysis, plots
 from altfuel.scenario_config import load_all
 from altfuel.utils import OUTPUT_DIR
 
-FIG = OUTPUT_DIR / "figures"
+FIGURES = OUTPUT_DIR / "figures"
 
 
 def save(fig, name):
-    fig.savefig(FIG / f"{name}.png", dpi=180)
+    fig.savefig(FIGURES / f"{name}.png", dpi=180)
     plt.close(fig)
 
 
 def main():
-    FIG.mkdir(parents=True, exist_ok=True)
+    FIGURES.mkdir(parents=True, exist_ok=True)
     runs = []
     for sc in load_all():
         r = analysis.run(sc)
         runs.append(r)
         k = r.kpis
-        print(f"{sc.name:22s} {k['status']:8s} {k['legs_flown']:2d} legs  {k['aircraft']:2d} aircraft  "
-              f"{k['co2_t']:6.1f} t CO2  ${k['total_cost_usd']:9,.0f}  {r.violations or 'no violations'}")
+        if k["status"] not in analysis.SOLVED:
+            print(f"{sc.name:24s} {k['status']}: no solution")
+            continue
+        print(f"{sc.name:24s} {k['legs_flown']:2d} legs  {k['aircraft']:2d} aircraft  "
+              f"{k['co2_t']:6.1f} t CO2  ${k['total_cost_usd']:9,.0f}  {k['pax_spilled']} spilled  "
+              f"{k['capacity_breaches']} capacity breaches  {r.violations or 'rotations OK'}")
+
         r.result.assign.to_csv(OUTPUT_DIR / f"assign_{sc.name}.csv")
         r.rotations.to_csv(OUTPUT_DIR / f"rotations_{sc.name}.csv", index=False)
+        if len(r.result.capacity):
+            r.result.capacity.round(3).to_csv(OUTPUT_DIR / f"capacity_{sc.name}.csv", index=False)
         save(plots.network_map(r), f"network_{sc.name}")
         save(plots.tail_gantt(r), f"gantt_{sc.name}")
 
         if sc.sweep:
-            p, values = sc.sweep["parameter"], sc.sweep["values"]
-            s = analysis.sweep(sc, p, values, r.data)
-            s.round(3).to_csv(OUTPUT_DIR / f"sweep_{sc.name}_{p}.csv", index=False)
-            save(plots.sweep_chart(s, p, sc.name), f"sweep_{sc.name}_{p}")
+            parameter = sc.sweep["parameter"]
+            results = analysis.sweep(sc, parameter, sc.sweep["values"])
+            results.round(3).to_csv(OUTPUT_DIR / f"sweep_{sc.name}_{parameter}.csv", index=False)
+            save(plots.sweep_chart(results, parameter, sc.name), f"sweep_{sc.name}_{parameter}")
 
     analysis.compare(runs).round(3).to_csv(OUTPUT_DIR / "scenario_summary.csv")
     save(plots.scenario_comparison(runs), "scenario_comparison")

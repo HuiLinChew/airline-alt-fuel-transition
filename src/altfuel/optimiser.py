@@ -1,24 +1,22 @@
-"""Module 7 - Optimiser: basic fleet assignment model (FAM) on time-space networks.
+"""Module 7: which aircraft type flies each leg (fleet assignment).
 
-Chooses which aircraft type flies each leg, or drops it, within the fleet owned.
+A mixed-integer program on the time-space networks (Hane et al. 1995, via
+Sherali et al. 2006), with optional leg cancellation (Wu et al. 2025):
 
-Formulation (Hane et al. 1995 via Sherali et al. 2006, Eqs. cover/balance/count;
-cancellation as in Wu et al. 2025, Eq. 2):
+    minimise   sum c[k,l] x[k,l] + sum drop_cost[l] y[l] + sum ownership[k] n[k]
 
-    min   sum_{k,l} c[k,l] x[k,l]  +  sum_l drop_cost[l] y[l]
+    cover      each leg is flown by one type or dropped:  sum_k x[k,l] + y[l] = 1
+    balance    at every node, aircraft in = aircraft out
+    count      n[k] = aircraft on the ground at the end of the period
+                      + aircraft still flying or turning then;  n[k] <= fleet[k]
+    capacity   (constrain mode) runway movements per hour <= limit, aircraft at a station <= stands
 
-    cover    sum_k x[k,l] + y[l] = 1                 every leg flown once or dropped
-    balance  at every node: arrivals + ground in = departures + ground out
-    count    aircraft on wrap-around arcs + flights crossing the count line <= A[k]
-
-    x[k,l], y[l] binary;  g (aircraft on the ground) integer >= 0
-
-Range and fuel availability are already enforced: infeasible flights have no arc.
-Outputs: assign (leg -> type or "dropped"), fleet used per type, objective value.
+x[k,l] = 1 if type k flies leg l; y[l] = 1 if leg l is dropped; g = aircraft on the ground.
+A type that can't fly a leg simply has no x for it.
 """
 
-from collections import defaultdict
-from dataclasses import dataclass
+from collections import Counter, defaultdict
+from dataclasses import dataclass, field
 
 import pandas as pd
 import pulp
@@ -29,70 +27,186 @@ from .scenario_config import Scenario
 
 @dataclass
 class Result:
-    status: str               # "Optimal", "Feasible (time limit)", or the solver's failure status
-    assign: pd.DataFrame      # leg_id -> type ("dropped" if not flown)
-    fleet_used: dict          # type -> aircraft needed
+    status: str
+    assign: pd.DataFrame          # type per leg_id, or "dropped"
+    fleet_used: dict              # aircraft needed per type
     objective: float
+    capacity: pd.DataFrame = field(default_factory=pd.DataFrame)   # use vs limit
 
 
-def solve(net: Network, perf_c: pd.DataFrame, drop_cost: pd.Series, sc: Scenario) -> Result:
-    m = pulp.LpProblem("fleet_assignment", pulp.LpMinimize)
+def solve(net: Network, perf: pd.DataFrame, drop_cost: pd.Series, sc: Scenario,
+          capacity: pd.DataFrame = None, ownership: pd.Series = None) -> Result:
     F = net.flights
+    if not sc.allow_drop:
+        check_every_leg_can_fly(F, perf, drop_cost.index)
+    model = pulp.LpProblem("fleet_assignment", pulp.LpMinimize)
 
-    # Decision variables
-    x = {(r.type, r.leg_id): pulp.LpVariable(f"x_{r.type}_{r.leg_id}", cat="Binary")
-         for r in F.itertuples()}
-    # (PuLP ignores bounds on "Binary" variables, so y is an integer bounded to 0..1, or 0..0)
-    y = {l: pulp.LpVariable(f"y_{l}", lowBound=0, upBound=1 if sc.allow_drop else 0, cat="Integer")
-         for l in drop_cost.index}
-    g = {(k, s, i): pulp.LpVariable(f"g_{k}_{s}_{i}", lowBound=0, cat="Integer")
-         for (k, s), times in net.nodes.items() for i in range(len(times))}
+    # Variables. y has an upper bound of 0 when legs can't be dropped. (It's an
+    # integer from 0 to 1 rather than "Binary" because PuLP ignores bounds on binaries.)
+    x = {}
+    for r in F.itertuples():
+        x[r.type, r.leg_id] = pulp.LpVariable(f"x_{r.type}_{r.leg_id}", cat="Binary")
+    y = {}
+    for leg in drop_cost.index:
+        y[leg] = pulp.LpVariable(f"y_{leg}", lowBound=0, upBound=1 if sc.allow_drop else 0, cat="Integer")
+    g = {}
+    for (k, s), times in net.nodes.items():
+        for i in range(len(times)):
+            g[k, s, i] = pulp.LpVariable(f"g_{k}_{s}_{i}", lowBound=0, cat="Integer")
 
-    # Group flight arcs once, so each constraint is a dictionary lookup
-    by_leg, out_of, into = defaultdict(list), defaultdict(list), defaultdict(list)
+    # Group the flight variables by leg and by the node they leave or reach
+    by_leg = defaultdict(list)
+    leaving = defaultdict(list)
+    reaching = defaultdict(list)
     for r in F.itertuples():
         var = x[r.type, r.leg_id]
         by_leg[r.leg_id].append(var)
-        out_of[r.type, r.origin, r.dep_node].append(var)
-        into[r.type, r.destination, r.arr_node].append(var)
+        leaving[r.type, r.origin, r.dep_node].append(var)
+        reaching[r.type, r.destination, r.arr_node].append(var)
 
-    # Objective: cost of flown legs + cost of dropped legs
-    m += (pulp.lpSum(perf_c.at[kl, "c"] * var for kl, var in x.items())
-          + pulp.lpSum(drop_cost[l] * y[l] for l in y))
+    # Cover
+    for leg in y:
+        model += pulp.lpSum(by_leg[leg]) + y[leg] == 1, f"cover_{leg}"
 
-    # Cover: each leg is flown by exactly one type, or dropped
-    for l in y:
-        m += pulp.lpSum(by_leg[l]) + y[l] == 1, f"cover_{l}"
-
-    # Balance: at node i of station s, aircraft in = aircraft out.
-    # Ground arc g[k,s,i] runs from node i to node i+1; the last one wraps to node 0.
+    # Balance. g[k,s,i] is the ground arc from node i to node i+1; the last one wraps to node 0.
     for (k, s), times in net.nodes.items():
         n = len(times)
         for i in range(n):
-            m += (pulp.lpSum(into[k, s, i]) + g[k, s, (i - 1) % n]
-                  == pulp.lpSum(out_of[k, s, i]) + g[k, s, i]), f"balance_{k}_{s}_{i}"
+            arriving = pulp.lpSum(reaching[k, s, i]) + g[k, s, i - 1 if i > 0 else n - 1]
+            departing = pulp.lpSum(leaving[k, s, i]) + g[k, s, i]
+            model += arriving == departing, f"balance_{k}_{s}_{i}"
 
-    # Count: aircraft crossing the count line (end of period) <= fleet available.
-    # Those are aircraft on the ground overnight plus flights still flying/turning then.
+    # Count
     fleet_used = {}
     for k in F.type.unique():
-        on_ground = [g[k, s, len(t) - 1] for (kk, s), t in net.nodes.items() if kk == k]
+        on_ground = [g[k, s, len(times) - 1] for (kk, s), times in net.nodes.items() if kk == k]
         in_air = [x[k, r.leg_id] for r in F[(F.type == k) & F.crosses].itertuples()]
         fleet_used[k] = pulp.lpSum(on_ground + in_air)
-        m += fleet_used[k] <= sc.fleet.get(k, 0), f"count_{k}"
+        model += fleet_used[k] <= sc.fleet.get(k, 0), f"count_{k}"
 
-    opts = sc.solver
-    m.solve(pulp.HiGHS(msg=opts.get("msg", False), timeLimit=opts.get("time_limit_s", 60),
-                       gapRel=opts.get("mip_gap", 0.0)))
-    if m.sol_status == pulp.LpSolutionOptimal:
+    # Objective. Ownership only counts in cost runs. A tiny cost per aircraft is
+    # added in every run so the solver never keeps spare aircraft it doesn't need.
+    objective = pulp.lpSum(perf.at[kl, "c"] * var for kl, var in x.items())
+    objective += pulp.lpSum(drop_cost[leg] * y[leg] for leg in y)
+    days = net.period_min / 1440
+    tiny = 1e-6 * max(perf.c.abs().max(), 1e-9)
+    for k, n in fleet_used.items():
+        own = ownership.get(k, 0.0) * days if (sc.objective == "cost" and ownership is not None) else 0
+        objective += (own + tiny) * n
+    model += objective
+
+    # Capacity: the same expressions are either limited (constrain) or just reported (check)
+    usage = []
+    if sc.capacity_mode != "off":
+        if sc.capacity_mode == "constrain" and not sc.allow_drop:
+            check_runway_capacity(F, capacity)
+        usage = capacity_usage(net, x, g, capacity)
+        if sc.capacity_mode == "constrain":
+            for i, u in enumerate(usage):
+                model += u["expr"] <= u["limit"], f"capacity_{i}"
+
+    model.solve(pulp.HiGHS(msg=sc.solver.get("msg", False),
+                           timeLimit=sc.solver.get("time_limit_s", 60),
+                           gapRel=sc.solver.get("mip_gap", 0.0)))
+    if model.sol_status == pulp.LpSolutionOptimal:
         status = "Optimal"
-    elif m.sol_status == pulp.LpSolutionIntegerFeasible:
-        status = "Feasible (time limit)"   # best solution found; not proven optimal
+    elif model.sol_status == pulp.LpSolutionIntegerFeasible:
+        status = "Feasible (time limit)"
     else:
-        return Result(pulp.LpStatus[m.status], pd.DataFrame(columns=["type"]), {}, float("nan"))
+        no_assign = pd.DataFrame(columns=["type"], index=pd.Index([], name="leg_id"))
+        return Result(pulp.LpStatus[model.status], no_assign, {}, float("nan"))
 
-    flown = {l: k for (k, l), var in x.items() if var.value() > 0.5}
-    assign = pd.DataFrame({"type": [flown.get(l, "dropped") for l in y]}, index=list(y))
-    assign.index.name = "leg_id"
-    used = {k: round(expr.value()) for k, expr in fleet_used.items()}
-    return Result(status, assign, used, pulp.value(m.objective))
+    flown_by = {leg: k for (k, leg), var in x.items() if var.value() > 0.5}
+    assign = pd.DataFrame({"type": [flown_by.get(leg, "dropped") for leg in y]},
+                          index=pd.Index(list(y), name="leg_id"))
+    used = {k: round(n.value()) for k, n in fleet_used.items()}
+
+    rows = []
+    for u in usage:
+        rows.append({"station": u["station"], "measure": u["measure"], "time_min": u["time_min"],
+                     "limit": u["limit"], "used": round(pulp.value(u["expr"]) or 0)})
+    cap = pd.DataFrame(rows)
+    if len(cap):
+        cap["utilisation"] = cap.used / cap.limit
+        cap["over"] = cap.used > cap.limit
+    return Result(status, assign, used, pulp.value(model.objective), cap)
+
+
+def capacity_usage(net: Network, x: dict, g: dict, capacity: pd.DataFrame) -> list:
+    """Runway: flights departing or arriving at a station in each clock hour (each
+    type lands at its own time). Stands: aircraft at a station at each arrival time,
+    either waiting on the ground or still turning. Stand use only goes up when an
+    aircraft arrives, so checking at arrival times finds every peak."""
+    F = net.flights
+    usage = []
+
+    movements = defaultdict(list)
+    for r in F.itertuples():
+        movements[r.origin, r.dep_t // 60].append(x[r.type, r.leg_id])
+        movements[r.destination, r.arr_t // 60].append(x[r.type, r.leg_id])
+    for (s, hour), terms in sorted(movements.items()):
+        usage.append({"station": s, "measure": "movements_per_hour", "time_min": hour * 60,
+                      "limit": capacity.at[s, "movements_per_hour"], "expr": pulp.lpSum(terms)})
+
+    def turning(t, arrive, ready):
+        if arrive <= ready:
+            return arrive <= t < ready
+        return t >= arrive or t < ready          # the turn runs past the end of the period
+
+    for s in sorted(set(F.destination)):
+        arrivals = F[F.destination == s]
+        for t in sorted(set(arrivals.arr_t)):
+            terms = []
+            for (k, station), times in net.nodes.items():
+                if station == s:
+                    i = sum(1 for node_t in times if node_t <= t) - 1   # last node at or before t
+                    terms.append(g[k, s, i if i >= 0 else len(times) - 1])
+            for r in arrivals.itertuples():
+                if turning(t, r.arr_t, r.ready_t):
+                    terms.append(x[r.type, r.leg_id])
+            usage.append({"station": s, "measure": "stands", "time_min": t,
+                          "limit": capacity.at[s, "stands"], "expr": pulp.lpSum(terms)})
+    return usage
+
+
+def check_every_leg_can_fly(F: pd.DataFrame, perf: pd.DataFrame, legs) -> None:
+    """Every leg needs at least one type that can fly it, or the model has no solution."""
+    stranded = sorted(set(legs) - set(F.leg_id))
+    if not stranded:
+        return
+    lines = []
+    for leg in stranded:
+        reasons = []
+        for k, r in perf.xs(leg, level="leg_id").iterrows():
+            why = []
+            if not r.in_range:
+                why.append("out of range")
+            if not r.fuel_at_origin:
+                why.append("no fuel at origin")
+            if not r.fits:
+                why.append("too few seats")
+            reasons.append(f"{k}: {', '.join(why)}")
+        lines.append(f"{leg} ({'; '.join(reasons)})")
+    raise ValueError("no aircraft type can fly these legs and allow_drop is false:\n  "
+                     + "\n  ".join(lines) + "\nAllow spill or drops, or change the fleet or fuels.")
+
+
+def check_runway_capacity(F: pd.DataFrame, capacity: pd.DataFrame) -> None:
+    """With every leg flown, each departure hour is fixed, and so is an arrival hour if
+    every type that can fly the leg lands in the same hour. If these alone overload
+    an hour, there is no solution: say which hour."""
+    fixed = Counter()
+    for leg, rows in F.groupby("leg_id"):
+        first = rows.iloc[0]
+        fixed[first.origin, first.dep_t // 60] += 1
+        if (rows.arr_t // 60).nunique() == 1:
+            fixed[first.destination, first.arr_t // 60] += 1
+
+    over = []
+    for (s, hour), n in sorted(fixed.items()):
+        limit = capacity.at[s, "movements_per_hour"]
+        if n > limit:
+            over.append(f"{s} {hour % 24:02d}:00: {n} movements > {limit:.1f}")
+    if over:
+        raise ValueError("runway capacity is exceeded with every leg flown (allow_drop is false):\n  "
+                         + "\n  ".join(over))

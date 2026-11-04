@@ -1,13 +1,8 @@
-"""Module 2 - Airport capability.
+"""Module 2: which fuels each airport offers, at what price, and its capacity.
 
-Which fuels each airport offers, and at what price.
-Output: airport_fuel with one row per (station, fuel): available, price_usd_per_kg.
-
-Method: tier lookup. A fuel is offered at every airport whose tier is <= the
-scenario's limit for that fuel (default from fuels.csv: kerosene everywhere,
-others nowhere), plus any stations the scenario lists explicitly. Price = base
-price x a tier factor, since smaller airports pay more for LH2 (Hoelzen et al. 2025).
-Single year for now; a year column comes with the stock-flow module.
+A fuel is offered at airports whose tier is <= the scenario's limit for that fuel
+(tier 1 = large hub), plus any airports the scenario names. Smaller airports pay
+more for alternative fuels (tier_price_factor).
 """
 
 import pandas as pd
@@ -17,12 +12,24 @@ from .scenario_config import Scenario
 
 
 def airport_fuel(data: Data, sc: Scenario) -> pd.DataFrame:
+    """One row per (station, fuel): available, price_usd_per_kg."""
     rows = []
-    for station, ap in data.airports.iterrows():
+    for station, airport in data.airports.iterrows():
         for fuel, f in data.fuels.iterrows():
             max_tier = sc.fuel_max_tier.get(fuel, f.default_max_tier)
-            available = ap.tier <= max_tier or station in sc.fuel_stations.get(fuel, [])
-            factor = sc.tier_price_factor.get(fuel, {}).get(int(ap.tier), 1.0)
-            rows.append(dict(station=station, fuel=fuel, available=bool(available),
-                             price_usd_per_kg=f.price_usd_per_kg * factor))
+            named = station in sc.fuel_stations.get(fuel, [])
+            factor = sc.tier_price_factor.get(fuel, {}).get(int(airport.tier), 1.0)
+            rows.append({"station": station, "fuel": fuel,
+                         "available": bool(airport.tier <= max_tier or named),
+                         "price_usd_per_kg": f.price_usd_per_kg * factor})
     return pd.DataFrame(rows).set_index(["station", "fuel"])
+
+
+def airport_capacity(data: Data, sc: Scenario) -> pd.DataFrame:
+    """Runway movements per hour and stands available to this airline at each station."""
+    share = sc.capacity_share
+    if not isinstance(share, dict):
+        share = {"movements_per_hour": share, "stands": share}
+    airports = data.airports
+    return pd.DataFrame({"movements_per_hour": airports.hourly_capacity * share["movements_per_hour"],
+                         "stands": airports.stands * share["stands"]})

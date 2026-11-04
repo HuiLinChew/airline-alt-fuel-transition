@@ -1,0 +1,11 @@
+# As alt_carbon_200, but LH2 aircraft have 150 seats (illustrative: cabin space lost
+# to tanks) and passengers who don't fit are spilled at their fare.
+name: alt_carbon_200_spill
+description: As alt_carbon_200 with 150-seat LH2 aircraft; excess passengers spilled (placeholder fares)
+objective: cost
+fleet: {KER-NB: 30, LH2-NB: 6, CH4-NB: 6}
+fuel_max_tier: {lh2: 1, ch4: 2}
+carbon_price: 200
+aircraft_overrides: {LH2-NB: {seats: 150}}
+allow_spill: true
+wtt_co2_kg_per_kg: {kerosene: 0, lh2: 0, ch4: 0}   # PLACEHOLDER: well-to-tank CO2, kg per kg fuel

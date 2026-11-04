@@ -6,3 +6,4 @@ fleet: {KER-NB: 30, LH2-NB: 6, CH4-NB: 6}
 fuel_max_tier: {lh2: 1, ch4: 2}
 carbon_price: 200
 allow_drop: true
+wtt_co2_kg_per_kg: {kerosene: 0, lh2: 0, ch4: 0}   # PLACEHOLDER: well-to-tank CO2, kg per kg fuel

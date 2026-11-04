@@ -4,3 +4,4 @@ description: LH2 and CH4 aircraft available, minimise fuel energy
 objective: energy
 fleet: {KER-NB: 30, LH2-NB: 6, CH4-NB: 6}
 fuel_max_tier: {lh2: 1, ch4: 2}     # LH2 at tier-1 airports, methane at tier 1-2
+wtt_co2_kg_per_kg: {kerosene: 0, lh2: 0, ch4: 0}   # PLACEHOLDER: well-to-tank CO2, kg per kg fuel

@@ -1,7 +1,7 @@
-"""Figures for the analysis: network map, tail Gantt, scenario comparison, sweep.
+"""Figures: network map, tail Gantt chart, scenario comparison and sweep chart.
 
-Fuel colours follow the row order of fuels.csv (fixed palette order, so a fuel
-keeps its colour in every figure); labels come from its "label" column.
+Each fuel gets the colour at its row number in fuels.csv, so it keeps the same
+colour in every figure.
 """
 
 import matplotlib.pyplot as plt
@@ -10,130 +10,164 @@ import pandas as pd
 from matplotlib.lines import Line2D
 from matplotlib.patches import FancyArrowPatch, Patch
 
-PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
-INK, INK2, GRID, SURFACE = "#0b0b0b", "#52514e", "#e4e3df", "#fcfcfb"
+COLOURS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
+BLACK, GREY, LIGHT_GREY, BACKGROUND = "#0b0b0b", "#52514e", "#e4e3df", "#fcfcfb"
+UNITS = {"carbon_price": "USD per t CO₂", "yield_usd_per_pax_km": "USD per pax-km"}
 
 plt.rcParams.update({
-    "figure.facecolor": SURFACE, "axes.facecolor": SURFACE, "savefig.facecolor": SURFACE,
-    "text.color": INK, "axes.labelcolor": INK2, "xtick.color": INK2, "ytick.color": INK2,
-    "axes.edgecolor": GRID, "font.size": 10, "axes.spines.top": False, "axes.spines.right": False,
+    "figure.facecolor": BACKGROUND, "axes.facecolor": BACKGROUND, "savefig.facecolor": BACKGROUND,
+    "text.color": BLACK, "axes.labelcolor": GREY, "xtick.color": GREY, "ytick.color": GREY,
+    "axes.edgecolor": LIGHT_GREY, "font.size": 10, "axes.spines.top": False, "axes.spines.right": False,
 })
 
 
-def fuel_style(fuels: pd.DataFrame):
-    """(colour, label) per fuel from fuels.csv order."""
-    colour = {f: PALETTE[i % len(PALETTE)] for i, f in enumerate(fuels.index)}
-    return colour, fuels.label.to_dict()
+def fuel_colours(fuels: pd.DataFrame) -> dict:
+    return {fuel: COLOURS[i % len(COLOURS)] for i, fuel in enumerate(fuels.index)}
 
 
-def _style(ax, grid_axis="both"):
-    ax.grid(axis=grid_axis, color=GRID, lw=0.6)
+def add_grid(ax, axis="both"):
+    ax.grid(axis=axis, color=LIGHT_GREY, lw=0.6)
     ax.set_axisbelow(True)
 
 
 def network_map(run):
-    """One curved line per (airport pair, fuel); width = legs per period."""
-    airports, colour, label = run.data.airports, *fuel_style(run.data.fuels)
+    """One curved line per airport pair and fuel; thicker = more legs."""
+    airports = run.data.airports
+    colour = fuel_colours(run.data.fuels)
+    label = run.data.fuels.label
     fuels = list(colour)
+
+    flown = run.flown.merge(run.rotations[["leg_id", "origin", "destination"]], on="leg_id")
+    flown["pair"] = [tuple(sorted(p)) for p in zip(flown.origin, flown.destination)]
+
     fig, ax = plt.subplots(figsize=(8.5, 6))
-    f = run.flown.merge(run.rotations[["leg_id", "origin", "destination"]], on="leg_id")
-    f["pair"] = [tuple(sorted(p)) for p in zip(f.origin, f.destination)]
-    for (pair, fuel), n in f.groupby(["pair", "fuel"]).size().items():
-        a, b = (airports.loc[s, ["lon", "lat"]].values for s in pair)
-        bend = 0.08 + 0.12 * fuels.index(fuel)        # separate fuels on one pair
-        ax.add_patch(FancyArrowPatch(a, b, arrowstyle="-", color=colour[fuel],
-                                     lw=0.6 + 0.45 * n, connectionstyle=f"arc3,rad={bend}"))
-    ax.scatter(airports.lon, airports.lat, s=90, c=SURFACE, edgecolors=INK, lw=1.5, zorder=3)
-    always = [fu for fu in fuels if run.airport_fuel.xs(fu, level="fuel").available.all()]
-    for s, ap in airports.iterrows():
-        offered = [label[fu] for fu in fuels
-                   if fu not in always and run.airport_fuel.loc[(s, fu), "available"]]
-        ax.annotate(f"{s} (tier {ap.tier})\n{' · '.join(offered)}", (ap.lon, ap.lat),
+    for (pair, fuel), n in flown.groupby(["pair", "fuel"]).size().items():
+        start = airports.loc[pair[0], ["lon", "lat"]].to_numpy()
+        end = airports.loc[pair[1], ["lon", "lat"]].to_numpy()
+        bend = 0.08 + 0.12 * fuels.index(fuel)     # so two fuels on one route don't overlap
+        ax.add_patch(FancyArrowPatch(start, end, arrowstyle="-", color=colour[fuel], lw=0.6 + 0.45 * n,
+                                     connectionstyle=f"arc3,rad={bend}"))
+    ax.scatter(airports.lon, airports.lat, s=90, c=BACKGROUND, edgecolors=BLACK, lw=1.5, zorder=3)
+
+    # Label each airport with its tier and the fuels it offers (except fuels offered everywhere)
+    everywhere = [f for f in fuels if run.airport_fuel.xs(f, level="fuel").available.all()]
+    for station, airport in airports.iterrows():
+        offered = [label[f] for f in fuels
+                   if f not in everywhere and run.airport_fuel.loc[(station, f), "available"]]
+        ax.annotate(f"{station} (tier {airport.tier})\n{' · '.join(offered)}", (airport.lon, airport.lat),
                     xytext=(9, 6), textcoords="offset points", fontsize=8.5, zorder=4)
+
     ax.set_aspect(1 / np.cos(np.radians(airports.lat.mean())))
     ax.margins(0.18)
-    ax.set_xlabel("Longitude (°)"); ax.set_ylabel("Latitude (°)")
-    _style(ax)
-    used = [fu for fu in fuels if fu in set(f.fuel)]
-    handles = [Line2D([], [], color=colour[fu], lw=3, label=label[fu]) for fu in used]
-    handles += [Line2D([], [], color=INK2, lw=0.6 + 0.45 * n, label=f"{n} legs") for n in (2, 6)]
+    ax.set_xlabel("Longitude (°)")
+    ax.set_ylabel("Latitude (°)")
+    add_grid(ax)
+
+    handles = [Line2D([], [], color=colour[f], lw=3, label=label[f]) for f in fuels if f in set(flown.fuel)]
+    handles += [Line2D([], [], color=GREY, lw=0.6 + 0.45 * n, label=f"{n} legs") for n in (2, 6)]
     ax.legend(handles=handles, loc="lower left", bbox_to_anchor=(1.04, 0), frameon=False, fontsize=8.5)
-    k = run.kpis
-    ax.set_title(f"{run.scenario.name}: {k['legs_flown']} legs, {k['aircraft']} aircraft",
+
+    ax.set_title(f"{run.scenario.name}: {run.kpis['legs_flown']} legs, {run.kpis['aircraft']} aircraft",
                  loc="left", fontsize=11, pad=22)
-    note = f"(offered everywhere: {', '.join(label[fu] for fu in always)})" if always else ""
-    ax.text(0, 1.015, f"Labels: airport tier and fuels offered {note}",
-            transform=ax.transAxes, fontsize=8, color=INK2, va="bottom")
+    note = f" (offered everywhere: {', '.join(label[f] for f in everywhere)})" if everywhere else ""
+    ax.text(0, 1.015, f"Labels: airport tier and fuels offered{note}", transform=ax.transAxes,
+            fontsize=8, color=GREY, va="bottom")
     fig.tight_layout()
     return fig
 
 
 def tail_gantt(run):
-    colour, label = fuel_style(run.data.fuels)
-    fuel_of_type = run.data.aircraft_types.fuel.to_dict()
+    """One row per aircraft, one bar per flight."""
+    colour = fuel_colours(run.data.fuels)
+    fuel_of = run.data.aircraft_types.fuel
     rot = run.rotations
     tails = list(dict.fromkeys(rot.tail_id))
+
     fig, ax = plt.subplots(figsize=(10, 0.45 * len(tails) + 1.2))
     for r in rot.itertuples():
-        y, w = tails.index(r.tail_id), (r.arr_min - r.dep_min) / 60
-        ax.barh(y, w, left=r.dep_min / 60, height=0.62, color=colour[fuel_of_type[r.type]],
-                edgecolor=SURFACE, lw=2)
-        if w > 0.8:
-            ax.text(r.dep_min / 60 + w / 2, y, f"{r.origin}–{r.destination}", ha="center",
-                    va="center", fontsize=5.8 if w < 1.2 else 6.5, color="white")
+        row = tails.index(r.tail_id)
+        start, hours = r.dep_min / 60, (r.arr_min - r.dep_min) / 60
+        ax.barh(row, hours, left=start, height=0.62, color=colour[fuel_of[r.type]],
+                edgecolor=BACKGROUND, lw=2)
+        if hours > 0.8:
+            ax.text(start + hours / 2, row, f"{r.origin}–{r.destination}", ha="center", va="center",
+                    fontsize=5.8 if hours < 1.2 else 6.5, color="white")
+
     ax.set_yticks(range(len(tails)), tails, fontsize=8)
     ax.invert_yaxis()
-    end_h = max(24, int(np.ceil(rot.arr_min.max() / 60)))
-    ax.set_xlim(6, end_h)
-    ax.set_xticks(range(6, end_h + 1, 2), [f"{h % 24:02d}:00" for h in range(6, end_h + 1, 2)])
-    _style(ax, "x")
+    first_hour = min(6, rot.dep_min.min() // 60)
+    last_hour = max(24, int(np.ceil(rot.arr_min.max() / 60)))
+    ax.set_xlim(first_hour, last_hour)
+    ticks = range(first_hour, last_hour + 1, 2)
+    ax.set_xticks(ticks, [f"{h % 24:02d}:00" for h in ticks])
+    add_grid(ax, "x")
     ax.spines["left"].set_visible(False)
-    used = [fu for fu in colour if fu in {fuel_of_type[t] for t in rot.type}]
-    ax.legend(handles=[Patch(color=colour[fu], label=label[fu]) for fu in used],
-              loc="upper left", bbox_to_anchor=(1.0, 1.0), frameon=False, fontsize=8.5)
+
+    used = {fuel_of[t] for t in rot.type}
+    patches = [Patch(color=colour[f], label=run.data.fuels.label[f]) for f in colour if f in used]
+    ax.legend(handles=patches, loc="upper left", bbox_to_anchor=(1.0, 1.0), frameon=False, fontsize=8.5)
     ax.set_title(f"{run.scenario.name}: tail rotations", loc="left", fontsize=11)
     fig.tight_layout()
     return fig
 
 
 def scenario_comparison(runs):
-    """CO2 and total cost by fuel per scenario: two panels, one measure each."""
-    colour, label = fuel_style(runs[0].data.fuels)
+    """CO2 by fuel, and total cost by fuel (operating + ownership) plus lost revenue."""
+    runs = [r for r in runs if "total_cost_usd" in r.kpis]       # skip runs with no solution
+    colour = fuel_colours(runs[0].data.fuels)
+    label = runs[0].data.fuels.label
     names = [r.scenario.name for r in runs]
+
+    def co2(r, fuel):
+        return r.flown.loc[r.flown.fuel == fuel, "co2_t"].sum()
+
+    def cost_k(r, fuel):
+        types = r.data.aircraft_types.index[r.data.aircraft_types.fuel == fuel]
+        owning = sum(r.result.fleet_used.get(t, 0) * r.ownership.get(t, 0) for t in types)
+        return (r.flown.loc[r.flown.fuel == fuel, "operating_cost_usd"].sum() + owning) / 1000
+
+    lost_k = np.array([(r.kpis["spill_cost_usd"] + r.kpis["dropped_revenue_usd"]) / 1000 for r in runs])
+
     fig, axes = plt.subplots(1, 2, figsize=(11, 0.55 * len(names) + 1.8), sharey=True)
-    panels = [("co2_t", "CO₂, tank-to-wake (t)", 1), ("cost_usd", "Operating cost ($k)", 1e3)]
-    for ax, (col, axis_label, scale) in zip(axes, panels):
-        left = np.zeros(len(names))
+    for ax, value, xlabel in [(axes[0], co2, "CO₂, well-to-wake (t)"), (axes[1], cost_k, "Total cost ($k)")]:
+        left = np.zeros(len(runs))
         for fuel in colour:
-            v = np.array([r.flown.loc[r.flown.fuel == fuel, col].sum() / scale for r in runs])
-            ax.barh(range(len(names)), v, left=left, height=0.6, color=colour[fuel],
-                    edgecolor=SURFACE, lw=2, label=label[fuel])
-            left += v
-        for i, tot in enumerate(left):
-            delta = "" if i == 0 else f"  ({100 * (tot / left[0] - 1):+.0f}%)"
-            ax.text(tot, i, f" {tot:,.0f}{delta}", va="center", fontsize=8.5)
+            widths = np.array([value(r, fuel) for r in runs])
+            if widths.any():
+                ax.barh(range(len(runs)), widths, left=left, height=0.6, color=colour[fuel],
+                        edgecolor=BACKGROUND, lw=2, label=label[fuel])
+                left += widths
+        if value is cost_k and lost_k.any():
+            ax.barh(range(len(runs)), lost_k, left=left, height=0.6, color=LIGHT_GREY,
+                    edgecolor=BACKGROUND, lw=2, hatch="///", label="Lost revenue (spill, drops)")
+            left += lost_k
+        for i, total in enumerate(left):
+            change = "" if i == 0 else f"  ({100 * (total / left[0] - 1):+.0f}%)"
+            ax.text(total, i, f" {total:,.0f}{change}", va="center", fontsize=8.5)
         ax.set_xlim(0, left.max() * 1.4)
-        ax.set_xlabel(axis_label)
-        _style(ax, "x")
+        ax.set_xlabel(xlabel)
+        add_grid(ax, "x")
         ax.spines["left"].set_visible(False)
-    axes[0].set_yticks(range(len(names)), names)
+
+    axes[0].set_yticks(range(len(runs)), names)
     axes[0].invert_yaxis()
-    fig.suptitle("Scenario comparison (Δ vs baseline in brackets)", x=0.01, ha="left", fontsize=11)
-    h, l = axes[0].get_legend_handles_labels()
-    fig.legend(h, l, loc="upper right", ncol=len(h), frameon=False, fontsize=8.5)
+    fig.suptitle("Scenario comparison (change vs baseline in brackets)", x=0.01, ha="left", fontsize=11)
+    handles, labels = axes[1].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper right", ncol=len(handles), frameon=False, fontsize=8.5)
     fig.tight_layout(rect=(0, 0, 1, 0.93))
     return fig
 
 
-def sweep_chart(sweep: pd.DataFrame, parameter: str, scenario_name: str, reference_fuel="kerosene"):
-    """Share of legs not flown on the reference fuel, against the swept parameter."""
+def sweep_chart(sweep: pd.DataFrame, parameter: str, scenario_name: str):
+    """Share of legs not flown on kerosene, against the swept setting."""
     fig, ax = plt.subplots(figsize=(7, 4))
-    ax.plot(sweep[parameter], 100 * (1 - sweep[f"share_{reference_fuel}"]), color=PALETTE[1],
-            lw=2, marker="o", ms=8, mec=SURFACE, mew=2)
-    ax.set_xlabel(parameter.replace("_", " "))
+    ax.plot(sweep[parameter], 100 * (1 - sweep["share_kerosene"]), color=COLOURS[1],
+            lw=2, marker="o", ms=8, mec=BACKGROUND, mew=2)
+    unit = f" ({UNITS[parameter]})" if parameter in UNITS else ""
+    ax.set_xlabel(parameter.replace("_", " ").capitalize() + unit)
     ax.set_ylabel("Legs flown on alternative fuel (%)")
     ax.set_ylim(0, 100)
-    _style(ax)
+    add_grid(ax)
     ax.set_title(f"Sweep of {parameter} ({scenario_name})", loc="left", fontsize=11)
     fig.tight_layout()
     return fig

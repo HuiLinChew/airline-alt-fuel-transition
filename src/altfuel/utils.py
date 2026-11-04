@@ -1,4 +1,4 @@
-"""Small helpers shared by several modules (no modelling logic)."""
+"""Folder paths and a CSV reader shared by the other modules."""
 
 from pathlib import Path
 
@@ -10,11 +10,5 @@ OUTPUT_DIR = ROOT / "outputs"
 
 
 def read_csv(path) -> pd.DataFrame:
-    """Read a CSV without turning the text "NA" (North America) into a missing value."""
+    # Keep the region code "NA" (North America) as text instead of a missing value
     return pd.read_csv(path, keep_default_na=False, na_values=[""])
-
-
-def hhmm(minutes: int) -> str:
-    """390 -> '06:30' (wraps past midnight: 1500 -> '01:00')."""
-    h, m = divmod(int(minutes) % 1440, 60)
-    return f"{h:02d}:{m:02d}"

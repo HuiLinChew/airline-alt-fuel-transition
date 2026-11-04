@@ -1,16 +1,12 @@
-"""Module 8 - Rotation checker.
+"""Module 8: turn the assignment into rotations for individual aircraft.
 
-Turns the type-level assignment into tail rotations and flags rule breaks.
-Outputs: rotations (one row per leg flown, with its tail) and violations.
+For each type, go through its legs in departure order and give each leg the
+aircraft at the origin that has been ready longest. If none is ready, a new
+aircraft starts the day there. This is a check on the optimiser's answer, not
+an optimisation.
 
-Method (greedy, first-ready): go through each type's legs in departure order.
-Give each leg the aircraft at the origin that became ready earliest; if none is
-ready, a new aircraft starts the period there. An aircraft is ready again at its
-arrival time plus that type's turn time. This sequential FAM-then-routing order
-is standard airline practice (Sherali et al. 2006; Justin et al. 2022).
-
-Checks: tails needed <= fleet available, and every tail ends the period at a
-station where another tail of that type starts (so the schedule can repeat).
+It flags two problems: needing more aircraft than the optimiser counted, and
+aircraft ending the day somewhere other than where the next day's flights start.
 """
 
 from collections import Counter
@@ -20,27 +16,36 @@ import pandas as pd
 from .data_layer import Data
 
 
-def build_rotations(data: Data, perf: pd.DataFrame, assign: pd.DataFrame, fleet: dict):
+def build_rotations(data: Data, perf: pd.DataFrame, assign: pd.DataFrame, fleet_used: dict):
     flown = assign[assign.type != "dropped"].join(data.legs).sort_values("dep_min")
-    rows, violations = [], []
+    rows = []
+    problems = []
+
     for ac_type, legs in flown.groupby("type"):
-        ready = {}        # station -> list of (ready minute, tail id) for aircraft waiting there
-        start, end = {}, {}
+        waiting = {}              # station -> list of (ready time, tail)
+        first_station = {}        # tail -> where it starts the day
+        last_station = {}         # tail -> where it ends the day
+
         for leg_id, leg in legs.iterrows():
-            waiting = [(t, tail) for t, tail in ready.get(leg.origin, []) if t <= leg.dep_min]
-            if waiting:
-                t, tail = min(waiting)
-                ready[leg.origin].remove((t, tail))
+            ready_here = [(t, tail) for t, tail in waiting.get(leg.origin, []) if t <= leg.dep_min]
+            if ready_here:
+                t, tail = min(ready_here)
+                waiting[leg.origin].remove((t, tail))
             else:
-                tail = f"{ac_type}-{len(start) + 1:02d}"
-                start[tail] = leg.origin
-            ready.setdefault(leg.destination, []).append(
-                (leg.arr_min + perf.at[(ac_type, leg_id), "turn_min"], tail))
-            end[tail] = leg.destination
-            rows.append(dict(tail_id=tail, type=ac_type, leg_id=leg_id, origin=leg.origin,
-                             destination=leg.destination, dep_min=leg.dep_min, arr_min=leg.arr_min))
-        if len(start) > fleet.get(ac_type, 0):
-            violations.append(f"{ac_type}: needs {len(start)} aircraft, only {fleet.get(ac_type, 0)} available")
-        if Counter(start.values()) != Counter(end.values()):
-            violations.append(f"{ac_type}: end-of-period positions do not match next period's starts")
-    return pd.DataFrame(rows), violations
+                tail = f"{ac_type}-{len(first_station) + 1:02d}"
+                first_station[tail] = leg.origin
+
+            arr = perf.at[(ac_type, leg_id), "arr_min"]
+            ready = arr + perf.at[(ac_type, leg_id), "turn_min"]
+            waiting.setdefault(leg.destination, []).append((ready, tail))
+            last_station[tail] = leg.destination
+            rows.append({"tail_id": tail, "type": ac_type, "leg_id": leg_id, "origin": leg.origin,
+                         "destination": leg.destination, "dep_min": leg.dep_min, "arr_min": arr})
+
+        needed, counted = len(first_station), fleet_used.get(ac_type, 0)
+        if needed > counted:
+            problems.append(f"{ac_type}: rotations need {needed} aircraft, the optimiser counted {counted}")
+        if Counter(first_station.values()) != Counter(last_station.values()):
+            problems.append(f"{ac_type}: aircraft end the day where the next day's flights don't start")
+
+    return pd.DataFrame(rows), problems

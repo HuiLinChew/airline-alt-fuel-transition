@@ -46,16 +46,26 @@ Full walk-through and every scenario setting: `docs/code_guide.md`. Sources for 
 
 ## First results (dummy data)
 
-| Scenario | Aircraft | Alt-fuel legs | CO₂ vs baseline | Cost vs baseline |
+Methane = fossil LNG (e-methane available as a switch).
+
+| Scenario | Aircraft | Legs: kerosene / LH₂ / LNG | CO₂ vs baseline | Total cost vs baseline |
 |---|---|---|---|---|
-| `baseline` (kerosene) | 9 | 0% | — | — |
-| `alt_min_energy` | 9 | 0% | 0% | 0% |
-| `alt_carbon_200` | 10 | 65% | −66% | +28% |
-| `alt_min_co2` | 10 | 100% | −72% | +32% |
+| `baseline` (kerosene) | 9 | 100 / 0 / 0% | — | — |
+| `alt_min_energy` | 9 | 100 / 0 / 0% | 0% | 0% |
+| `alt_carbon_200` | 9 | 0 / 35 / 65% | −54% | +18% |
+| `alt_carbon_200_emethane` | 9 | 45 / 55 / 0% | −59% | +21% |
+| `alt_carbon_200_spill` (150-seat LH₂, spill allowed) | 9 | 5 / 25 / 70% | −38% | +18% |
+| `alt_carbon_200_drop` (legs may be dropped) | 5 | 0 / 0 / 100% | −41% | +6% |
+| `alt_min_co2` | 10 | 0 / 65 / 35% | −72% | +16% |
+
+Total cost = operating cost + aircraft ownership + revenue lost to spilled passengers and dropped legs.
 
 - Minimising fuel burn never picks LH₂ or methane: they need more energy per flight.
-- With these prices LH₂ beats kerosene once carbon costs more than about 100–150 USD/t,
-  consistent with Hoelzen et al. (2025). Above that, use is capped by the LH₂
-  fleet (6 aircraft) and by Dublin having no LH₂.
-- `alt_carbon_200_drop` shows the leg-dropping option; with placeholder fares it
-  drops most legs, so it is a mechanism check, not a result.
+- **Fossil LNG beats kerosene even with no carbon price, but only because no LNG-aircraft
+  price premium is sourced yet (0%).** At +5% the LNG share halves; at +12% it disappears.
+  Methane results should not be reported until this is sourced (see `docs/methods.md`).
+- LH₂ takes over from LNG as the carbon price rises: 35% of legs at 200 USD/t, 55% from 300 USD/t.
+- e-methane (29 USD/GJ) is dearer than LH₂ (21 USD/GJ), so it is not chosen at these prices.
+- Airport capacity is reported for every run and does not bind on this network.
+- Drop, spill and capacity results are mechanism checks: crew/maintenance costs and the
+  airline's capacity share are still placeholders.

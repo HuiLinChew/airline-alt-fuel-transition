@@ -4,7 +4,7 @@ Each scenario is a YAML file in scenarios/. It only lists the settings that
 differ from the defaults below.
 """
 
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -69,13 +69,7 @@ def load_scenario(name_or_path) -> Scenario:
     if not path.suffix:
         path = SCENARIO_DIR / f"{name_or_path}.yaml"
     with open(path) as f:
-        settings = yaml.safe_load(f) or {}
-
-    known = {f.name for f in fields(Scenario)}
-    unknown = set(settings) - known
-    if unknown:
-        raise ValueError(f"{path.name}: unknown settings {sorted(unknown)}")
-    return Scenario(**settings)
+        return Scenario(**yaml.safe_load(f))
 
 
 def load_all() -> list[Scenario]:
@@ -86,7 +80,8 @@ def load_all() -> list[Scenario]:
 
 
 def validate(sc: Scenario, data) -> None:
-    """Stop on any setting that doesn't match the data (e.g. a misspelt aircraft type)."""
+    """Catch misspelt names in a scenario. Without this, a typo like "LH2-NBB" in the
+    fleet would just be ignored and the run would quietly be kerosene-only."""
     types = set(data.aircraft_types.index)
     fuels = set(data.fuels.index)
     stations = set(data.airports.index)
@@ -113,26 +108,11 @@ def validate(sc: Scenario, data) -> None:
     check("fuel_overrides", sc.fuel_overrides, fuels)
     for fuel, cols in sc.fuel_overrides.items():
         check(f"fuel_overrides[{fuel}]", cols, data.fuels.columns)
-
-    for ac_type, n in sc.fleet.items():
-        if not isinstance(n, int) or n < 0:
-            errors.append(f"fleet: {ac_type} must be a whole number >= 0, not {n}")
-    if sum(sc.fleet.values()) == 0:
-        errors.append("fleet has no aircraft")
-
-    if sc.objective != "cost" and (sc.allow_spill or sc.allow_drop):
-        errors.append("allow_spill and allow_drop need the cost objective (lost passengers are a cost)")
-
     check("capacity_mode", [sc.capacity_mode], CAPACITY_MODES)
-    check("airports.csv columns", ["hourly_capacity", "stands"], data.airports.columns)
-    if isinstance(sc.capacity_share, dict):
-        if set(sc.capacity_share) != {"movements_per_hour", "stands"}:
-            errors.append("capacity_share needs both movements_per_hour and stands")
-        shares = list(sc.capacity_share.values())
-    else:
-        shares = [sc.capacity_share]
-    if not all(0 < s <= 1 for s in shares):
-        errors.append("capacity_share must be between 0 and 1")
+
+    # Lost passengers are costed in dollars, so they can't be mixed into an energy or CO2 objective
+    if sc.objective != "cost" and (sc.allow_spill or sc.allow_drop):
+        errors.append("allow_spill and allow_drop only work with the cost objective")
 
     if errors:
         raise ValueError(f"scenario '{sc.name}':\n  " + "\n  ".join(errors))

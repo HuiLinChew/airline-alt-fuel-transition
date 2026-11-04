@@ -6,9 +6,9 @@ How an airline's network, fleet and costs change as some aircraft switch from
 kerosene to liquid hydrogen (LH₂) or methane. Builds on the airport-side models
 of Henry Sanford and Hasan Al-Timimi.
 
-**Status:** dummy network (5 airports, 40 daily legs, 3 aircraft types) to fix
-the model structure before real data. Values are from the literature where
-possible (see `docs/methods.md`); the rest are flagged placeholders.
+For now it runs on a dummy network (5 airports, 40 daily legs, 3 aircraft types)
+while the model structure is settled. Values come from the literature where
+possible (`docs/methods.md`); the rest are marked as placeholders.
 
 <p align="center"><img src="outputs/figures/network_alt_carbon_200.png" width="60%"></p>
 
@@ -60,12 +60,12 @@ Methane = fossil LNG (e-methane available as a switch).
 
 Total cost = operating cost + aircraft ownership + revenue lost to spilled passengers and dropped legs.
 
-- Minimising fuel burn never picks LH₂ or methane: they need more energy per flight.
-- **Fossil LNG beats kerosene even with no carbon price, but only because no LNG-aircraft
-  price premium is sourced yet (0%).** At +5% the LNG share halves; at +12% it disappears.
-  Methane results should not be reported until this is sourced (see `docs/methods.md`).
+- Minimising fuel burn never picks LH₂ or methane, because they need more energy per flight.
+- Fossil LNG beats kerosene even with no carbon price, but only because there's no
+  sourced price premium for LNG aircraft yet (it's 0%). At +5% the LNG share halves,
+  and at +12% it disappears, so methane results shouldn't be used until this is sourced.
 - LH₂ takes over from LNG as the carbon price rises: 35% of legs at 200 USD/t, 55% from 300 USD/t.
-- e-methane (29 USD/GJ) is dearer than LH₂ (21 USD/GJ), so it is not chosen at these prices.
-- Airport capacity is reported for every run and does not bind on this network.
-- Drop, spill and capacity results are mechanism checks: crew/maintenance costs and the
-  airline's capacity share are still placeholders.
+- e-methane (29 USD/GJ) costs more than LH₂ (21 USD/GJ), so it isn't chosen at these prices.
+- Airport capacity doesn't bind on this network.
+- The drop, spill and capacity results only show the mechanisms work: crew and
+  maintenance costs and the airline's capacity share are still placeholders.

@@ -150,20 +150,8 @@ def test_scenario_typos_are_caught(data):
         validate(Scenario(name="bad", fleet={"LH2-NBB": 4}), data)
     with pytest.raises(ValueError, match="fuel_max_tier"):
         validate(Scenario(name="bad", fuel_max_tier={"hydrogen": 1}), data)
-    with pytest.raises(ValueError, match="allow_spill and allow_drop"):
+    with pytest.raises(ValueError, match="only work with the cost objective"):
         validate(Scenario(name="bad", objective="co2", allow_drop=True), data)
-
-
-def test_bad_fleet_is_rejected(data):
-    with pytest.raises(ValueError, match="no aircraft"):
-        validate(Scenario(name="bad", fleet={"KER-NB": 0}), data)
-    with pytest.raises(ValueError, match="whole number"):
-        validate(Scenario(name="bad", fleet={"KER-NB": 2.5}), data)
-
-
-def test_partial_capacity_share_is_rejected(data):
-    with pytest.raises(ValueError, match="capacity_share"):
-        validate(Scenario(name="bad", capacity_share={"stands": 0.05}), data)
 
 
 def test_bad_input_data_is_rejected(data):
@@ -290,10 +278,9 @@ def test_stand_limit_is_respected(data):
     assert r.kpis["total_cost_usd"] >= analysis.run(load_scenario("alt_carbon_200"), data).kpis["total_cost_usd"]
 
 
-def test_overloaded_runway_gives_a_clear_error(data):
+def test_overloaded_runway_has_no_solution(data):
     sc = replace(load_scenario("baseline"), capacity_mode="constrain", capacity_share=0.03)
-    with pytest.raises(ValueError, match="runway capacity is exceeded"):
-        analysis.run(sc, data)
+    assert analysis.run(sc, data).kpis == {"status": "Infeasible"}
 
 
 def test_no_solution_gives_no_numbers(data):

@@ -60,13 +60,5 @@ def ownership_per_day(data: Data, sc: Scenario) -> pd.Series:
     """Daily cost of owning one aircraft of each type (Hoelzen et al. 2022, Eqs. A7-A8)."""
     o = {**DEFAULT_OWNERSHIP, **sc.ownership}
     rate, years, residual = o["interest_rate"], o["depreciation_years"], o["residual_value"]
-    if rate > 0:
-        annuity = rate * (1 - residual / (1 + rate) ** years) / (1 - 1 / (1 + rate) ** years)
-    else:
-        annuity = (1 - residual) / years
-
-    if "price_usd" in data.aircraft_types:
-        price = data.aircraft_types.price_usd.fillna(0)
-    else:
-        price = pd.Series(0.0, index=data.aircraft_types.index)
-    return price * (annuity + o["insurance_rate"]) / 365
+    annuity = rate * (1 - residual / (1 + rate) ** years) / (1 - 1 / (1 + rate) ** years)
+    return data.aircraft_types.price_usd * (annuity + o["insurance_rate"]) / 365

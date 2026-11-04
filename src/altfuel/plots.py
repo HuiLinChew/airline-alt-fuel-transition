@@ -91,7 +91,7 @@ def tail_gantt(run):
                 edgecolor=BACKGROUND, lw=2)
         if hours > 0.8:
             ax.text(start + hours / 2, row, f"{r.origin}–{r.destination}", ha="center", va="center",
-                    fontsize=5.8 if hours < 1.2 else 6.5, color="white")
+                    fontsize=6, color="white")
 
     ax.set_yticks(range(len(tails)), tails, fontsize=8)
     ax.invert_yaxis()

@@ -29,7 +29,7 @@ def main():
             continue
         print(f"{sc.name:24s} {k['legs_flown']:2d} legs  {k['aircraft']:2d} aircraft  "
               f"{k['co2_t']:6.1f} t CO2  ${k['total_cost_usd']:9,.0f}  {k['pax_spilled']} spilled  "
-              f"{k['capacity_breaches']} capacity breaches  {r.violations or 'rotations OK'}")
+              f"{k.get('capacity_breaches', '-')} capacity breaches  {r.violations or 'rotations OK'}")
 
         r.result.assign.to_csv(OUTPUT_DIR / f"assign_{sc.name}.csv")
         r.rotations.to_csv(OUTPUT_DIR / f"rotations_{sc.name}.csv", index=False)

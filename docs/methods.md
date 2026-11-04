@@ -38,7 +38,7 @@ Module numbers follow the planning sheet (FYP_Papers.xlsx, "Code modules").
 | Methane aircraft energy | +10% vs kerosene | Rompokos et al. 2020 (LNG 737-800, typical 1000–2000 NM flights) |
 | Aircraft price, kerosene narrowbody | 49.4 M USD | IBA (2021): new-delivery A320neo market value |
 | LH₂ aircraft price | +12% vs kerosene | Hoelzen et al. 2022 (short-range aircraft CAPEX) |
-| Methane aircraft price | = kerosene | **Gap, and decisive:** no LNG-aircraft price premium sourced (see methane section) |
+| Methane aircraft price | = kerosene | Not sourced yet, and it decides whether LNG wins (see methane section) |
 | Fossil LNG price | 0.57 USD/kg | LNG Japan 10.5 USD/mmbtu, 2027 forecast (World Bank CMO, Oct 2025) + airport handling 6.5 € cents/kg (Raab et al. 2024) |
 | Ownership finance | 5% interest, 14 years, 5% residual value, 0.5% insurance | Hoelzen et al. 2022, App. A |
 | Fare (yield) | 0.148 USD per pax-km | Proesmans et al. 2023, Table 3 |
@@ -68,8 +68,8 @@ Module numbers follow the planning sheet (FYP_Papers.xlsx, "Code modules").
 
 ## Methane: fossil LNG by default, e-methane by switching
 
-`ch4` in fuels.csv is **fossil LNG** (decided Nov 2026): fossil price, fossil CO₂, pays the carbon price.
-`ch4_e` is **e-methane**: synthetic price; its burnt CO₂ was taken from the air when it was made
+`ch4` in fuels.csv is fossil LNG (decided Nov 2026): fossil price, fossil CO₂, pays the carbon price.
+`ch4_e` is e-methane: synthetic price; its burnt CO₂ was taken from the air when it was made
 (well-to-tank −2.75 kg/kg, a placeholder that ignores production energy), and it is zero-rated
 for the carbon price (`carbon_price_share` 0). To switch, a scenario points the methane aircraft at
 the other fuel and offers it: see `scenarios/alt_carbon_200_emethane.yaml`.
@@ -79,7 +79,7 @@ the other fuel and offers it: see `scenarios/alt_carbon_200_emethane.yaml`.
 | Price, USD/GJ | 11.4 | 29.2 | 13.9 | 20.8 |
 | CO₂ burnt, kg/GJ (pays carbon price) | 55 (yes) | 55 (no) | 73 (yes) | 0 |
 
-**Sensitive result:** with these prices fossil LNG is cheaper per GJ than kerosene, so LNG aircraft
+With these prices fossil LNG is cheaper per GJ than kerosene, so LNG aircraft
 win even with no carbon price, but only because no LNG-aircraft price premium has been sourced (0%).
 On the dummy network with no carbon price: premium 0% → 100% of legs LNG; +5% → 65%; +12% (the LH₂
 premium) → 0%. The LNG aircraft premium (and LNG turnaround/refuelling data) must be sourced before
@@ -89,7 +89,7 @@ methane results are reported. Methane slip (unburnt CH₄, a strong greenhouse g
 
 Tankering will be added as fuel states in the network (Randeraad et al.: time-space-fuel
 network; Sirtori et al.: half-range rule). With no boil-off figure yet, the default
-assumption is **conservative**: fuel carried for a return leg cannot be held overnight,
+assumption is the cautious one: fuel carried for a return leg cannot be held overnight,
 so an LH₂ aircraft must end the day at an airport supplying LH₂ (the planning sheet's
 "overnight at a capable airport" rule; Maria's point that LH₂ boils off). The optimistic
 case (fuel held overnight) will be a scenario setting, so the two bracket the answer.

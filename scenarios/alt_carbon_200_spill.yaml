@@ -8,4 +8,4 @@ fuel_max_tier: {lh2: 1, ch4: 2}
 carbon_price: 200
 aircraft_overrides: {LH2-NB: {seats: 150}}
 allow_spill: true
-wtt_co2_kg_per_kg: {kerosene: 0, lh2: 0, ch4: 0}   # PLACEHOLDER: well-to-tank CO2, kg per kg fuel
+wtt_co2_kg_per_kg: {kerosene: 0, lh2: 0, ch4: 0}   # well-to-tank CO2 (kg per kg fuel), 0 until sourced

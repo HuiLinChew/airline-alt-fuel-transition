@@ -66,15 +66,11 @@ def perf(data: Data, airport_fuel: pd.DataFrame, sc: Scenario) -> pd.DataFrame:
     # Block time: the schedule's time is right for the reference type; other types
     # add the difference from flying the distance at their own cruise speed.
     scheduled = (p.arr_min - p.dep_min).to_numpy(float)
-    block = scheduled
-    if "cruise_kmh" in aircraft:
-        speed = p.type.map(aircraft.cruise_kmh).to_numpy(float)
-        ref_speed = float(aircraft.cruise_kmh.get(ref, np.nan))
-        adjusted = scheduled + distance * (1 / speed - 1 / ref_speed) * 60
-        block = np.where(np.isnan(adjusted), scheduled, adjusted)
-    block = np.round(block).astype(int)
+    speed = p.type.map(aircraft.cruise_kmh).to_numpy(float)
+    ref_speed = aircraft.cruise_kmh[ref]
+    block = np.round(scheduled + distance * (1 / speed - 1 / ref_speed) * 60).astype(int)
     if (block <= 0).any():
-        raise ValueError("a block time came out <= 0: check cruise_kmh")
+        raise ValueError("a block time is <= 0: check arr_min in legs.csv and cruise_kmh")
     p["block_min"] = block
     p["arr_min"] = p.dep_min.astype(int) + block
 
@@ -95,10 +91,10 @@ def perf(data: Data, airport_fuel: pd.DataFrame, sc: Scenario) -> pd.DataFrame:
     p["pax_cap"] = np.floor(p.seats * p.max_load_factor).astype(int)
     p["spill_pax"] = (p.pax - p.pax_cap).clip(lower=0).astype(int)
 
-    # Can this type fly this leg? (kept as separate reasons for error messages)
+    # Can this type fly this leg? Three separate reasons, so error messages can say which.
     p["in_range"] = (distance <= p.range_km.to_numpy(float)) & p.fuel_kg.notna().to_numpy()
     origin_fuel = pd.MultiIndex.from_arrays([p.origin, p.fuel])
-    p["fuel_at_origin"] = airport_fuel.available.reindex(origin_fuel).fillna(False).to_numpy(bool)
+    p["fuel_at_origin"] = airport_fuel.available.reindex(origin_fuel).to_numpy(bool)
     p["fits"] = (p.spill_pax == 0) | sc.allow_spill
     p["feasible"] = p.in_range & p.fuel_at_origin & p.fits
 

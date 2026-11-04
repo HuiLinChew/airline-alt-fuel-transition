@@ -15,7 +15,7 @@ x[k,l] = 1 if type k flies leg l; y[l] = 1 if leg l is dropped; g = aircraft on 
 A type that can't fly a leg simply has no x for it.
 """
 
-from collections import Counter, defaultdict
+from collections import defaultdict
 from dataclasses import dataclass, field
 
 import pandas as pd
@@ -34,8 +34,8 @@ class Result:
     capacity: pd.DataFrame = field(default_factory=pd.DataFrame)   # use vs limit
 
 
-def solve(net: Network, perf: pd.DataFrame, drop_cost: pd.Series, sc: Scenario,
-          capacity: pd.DataFrame = None, ownership: pd.Series = None) -> Result:
+def solve(net: Network, perf: pd.DataFrame, drop_cost: pd.Series, ownership: pd.Series,
+          capacity: pd.DataFrame, sc: Scenario) -> Result:
     F = net.flights
     if not sc.allow_drop:
         check_every_leg_can_fly(F, perf, drop_cost.index)
@@ -89,17 +89,15 @@ def solve(net: Network, perf: pd.DataFrame, drop_cost: pd.Series, sc: Scenario,
     objective = pulp.lpSum(perf.at[kl, "c"] * var for kl, var in x.items())
     objective += pulp.lpSum(drop_cost[leg] * y[leg] for leg in y)
     days = net.period_min / 1440
-    tiny = 1e-6 * max(perf.c.abs().max(), 1e-9)
+    tiny = 1e-6 * perf.c.abs().max()
     for k, n in fleet_used.items():
-        own = ownership.get(k, 0.0) * days if (sc.objective == "cost" and ownership is not None) else 0
+        own = ownership[k] * days if sc.objective == "cost" else 0
         objective += (own + tiny) * n
     model += objective
 
     # Capacity: the same expressions are either limited (constrain) or just reported (check)
     usage = []
     if sc.capacity_mode != "off":
-        if sc.capacity_mode == "constrain" and not sc.allow_drop:
-            check_runway_capacity(F, capacity)
         usage = capacity_usage(net, x, g, capacity)
         if sc.capacity_mode == "constrain":
             for i, u in enumerate(usage):
@@ -124,7 +122,7 @@ def solve(net: Network, perf: pd.DataFrame, drop_cost: pd.Series, sc: Scenario,
     rows = []
     for u in usage:
         rows.append({"station": u["station"], "measure": u["measure"], "time_min": u["time_min"],
-                     "limit": u["limit"], "used": round(pulp.value(u["expr"]) or 0)})
+                     "limit": u["limit"], "used": round(pulp.value(u["expr"]))})
     cap = pd.DataFrame(rows)
     if len(cap):
         cap["utilisation"] = cap.used / cap.limit
@@ -190,23 +188,3 @@ def check_every_leg_can_fly(F: pd.DataFrame, perf: pd.DataFrame, legs) -> None:
     raise ValueError("no aircraft type can fly these legs and allow_drop is false:\n  "
                      + "\n  ".join(lines) + "\nAllow spill or drops, or change the fleet or fuels.")
 
-
-def check_runway_capacity(F: pd.DataFrame, capacity: pd.DataFrame) -> None:
-    """With every leg flown, each departure hour is fixed, and so is an arrival hour if
-    every type that can fly the leg lands in the same hour. If these alone overload
-    an hour, there is no solution: say which hour."""
-    fixed = Counter()
-    for leg, rows in F.groupby("leg_id"):
-        first = rows.iloc[0]
-        fixed[first.origin, first.dep_t // 60] += 1
-        if (rows.arr_t // 60).nunique() == 1:
-            fixed[first.destination, first.arr_t // 60] += 1
-
-    over = []
-    for (s, hour), n in sorted(fixed.items()):
-        limit = capacity.at[s, "movements_per_hour"]
-        if n > limit:
-            over.append(f"{s} {hour % 24:02d}:00: {n} movements > {limit:.1f}")
-    if over:
-        raise ValueError("runway capacity is exceeded with every leg flown (allow_drop is false):\n  "
-                         + "\n  ".join(over))

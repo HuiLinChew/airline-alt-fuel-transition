@@ -47,7 +47,7 @@ def run(sc: Scenario, data: Data = None) -> Run:
     ownership = cost_revenue.ownership_per_day(data, sc)
 
     net = network_builder.build_network(data, perf, sc.period_min)
-    result = optimiser.solve(net, perf, drop, sc, capacity, ownership)
+    result = optimiser.solve(net, perf, drop, ownership, capacity, sc)
     rotations, violations = rotation_checker.build_rotations(data, perf, result.assign, result.fleet_used)
 
     flown = perf.reset_index().merge(result.assign.reset_index(), on=["leg_id", "type"])
@@ -61,7 +61,7 @@ def kpis(data: Data, flown: pd.DataFrame, result, drop_cost: pd.Series, ownershi
         return {"status": result.status}
 
     dropped = result.assign.index[result.assign.type == "dropped"]
-    ownership_cost = sum(n * ownership.get(k, 0) for k, n in result.fleet_used.items())
+    ownership_cost = sum(n * ownership[k] for k, n in result.fleet_used.items())
     out = {
         "status": result.status,
         "legs_flown": len(flown),
@@ -85,13 +85,13 @@ def kpis(data: Data, flown: pd.DataFrame, result, drop_cost: pd.Series, ownershi
                              + out["spill_cost_usd"] + out["dropped_revenue_usd"])
 
     for fuel in data.fuels.index:
-        out[f"share_{fuel}"] = (flown.fuel == fuel).mean() if len(flown) else 0.0
+        out[f"share_{fuel}"] = (flown.fuel == fuel).mean()
 
     cap = result.capacity
-    out["capacity_breaches"] = int(cap.over.sum()) if len(cap) else 0
-    for measure in ["movements_per_hour", "stands"]:
-        rows = cap[cap.measure == measure] if len(cap) else cap
-        out[f"peak_util_{measure}"] = rows.utilisation.max() if len(rows) else float("nan")
+    if len(cap):          # empty when capacity_mode is "off"
+        out["capacity_breaches"] = int(cap.over.sum())
+        out["peak_util_movements_per_hour"] = cap[cap.measure == "movements_per_hour"].utilisation.max()
+        out["peak_util_stands"] = cap[cap.measure == "stands"].utilisation.max()
     return out
 
 
@@ -113,6 +113,5 @@ def sweep(sc: Scenario, parameter: str, values, data: Data = None) -> pd.DataFra
     rows = []
     for value in values:
         kpi = run(replace(sc, **{parameter: value}), data).kpis
-        label = value if isinstance(value, (int, float, str)) else str(value)
-        rows.append({parameter: label, **kpi})
+        rows.append({parameter: value, **kpi})
     return pd.DataFrame(rows)

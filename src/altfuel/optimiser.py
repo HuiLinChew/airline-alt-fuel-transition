@@ -15,9 +15,12 @@ x[k,l] = 1 if type k flies leg l; y[l] = 1 if leg l is dropped; g = aircraft on 
 A type that can't fly a leg simply has no x for it.
 """
 
+from bisect import bisect_right
 from collections import defaultdict
 from dataclasses import dataclass, field
+from itertools import compress
 
+import numpy as np
 import pandas as pd
 import pulp
 
@@ -86,7 +89,8 @@ def solve(net: Network, perf: pd.DataFrame, drop_cost: pd.Series, ownership: pd.
 
     # Objective. Ownership only counts in cost runs. A tiny cost per aircraft is
     # added in every run so the solver never keeps spare aircraft it doesn't need.
-    objective = pulp.lpSum(perf.at[kl, "c"] * var for kl, var in x.items())
+    c = perf.c.reindex(list(x)).to_numpy()
+    objective = pulp.lpSum(ci * var for ci, var in zip(c, x.values()))
     objective += pulp.lpSum(drop_cost[leg] * y[leg] for leg in y)
     days = net.period_min / 1440
     tiny = 1e-6 * perf.c.abs().max()
@@ -146,22 +150,18 @@ def capacity_usage(net: Network, x: dict, g: dict, capacity: pd.DataFrame) -> li
         usage.append({"station": s, "measure": "movements_per_hour", "time_min": hour * 60,
                       "limit": capacity.at[s, "movements_per_hour"], "expr": pulp.lpSum(terms)})
 
-    def turning(t, arrive, ready):
-        if arrive <= ready:
-            return arrive <= t < ready
-        return t >= arrive or t < ready          # the turn runs past the end of the period
-
     for s in sorted(set(F.destination)):
         arrivals = F[F.destination == s]
-        for t in sorted(set(arrivals.arr_t)):
-            terms = []
-            for (k, station), times in net.nodes.items():
-                if station == s:
-                    i = sum(1 for node_t in times if node_t <= t) - 1   # last node at or before t
-                    terms.append(g[k, s, i if i >= 0 else len(times) - 1])
-            for r in arrivals.itertuples():
-                if turning(t, r.arr_t, r.ready_t):
-                    terms.append(x[r.type, r.leg_id])
+        arrive = arrivals.arr_t.to_numpy()
+        ready = arrivals.ready_t.to_numpy()
+        arc_vars = [x[k, leg] for k, leg in zip(arrivals.type, arrivals.leg_id)]
+        node_lists = [(k, times) for (k, station), times in net.nodes.items() if station == s]
+        for t in sorted(set(arrive)):
+            # Ground arc after the last node at or before t (the overnight arc if there is none)
+            terms = [g[k, s, (bisect_right(times, t) - 1) % len(times)] for k, times in node_lists]
+            # Flights that have landed but are still turning; some turns run past the period end
+            turning = np.where(arrive <= ready, (arrive <= t) & (t < ready), (t >= arrive) | (t < ready))
+            terms += list(compress(arc_vars, turning))
             usage.append({"station": s, "measure": "stands", "time_min": t,
                           "limit": capacity.at[s, "stands"], "expr": pulp.lpSum(terms)})
     return usage

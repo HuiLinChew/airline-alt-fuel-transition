@@ -49,8 +49,9 @@ def build_network(data: Data, perf: pd.DataFrame, period_min: int) -> Network:
             net.nodes[ac_type, station] = sorted(events.t.unique())
 
     # Position of each flight's departure and ready time in its station's node list
-    f["dep_node"] = [net.nodes[k, s].index(t) for k, s, t in zip(f.type, f.origin, f.dep_t)]
-    f["arr_node"] = [net.nodes[k, s].index(t) for k, s, t in zip(f.type, f.destination, f.ready_t)]
+    position = {key: {t: i for i, t in enumerate(times)} for key, times in net.nodes.items()}
+    f["dep_node"] = [position[k, s][t] for k, s, t in zip(f.type, f.origin, f.dep_t)]
+    f["arr_node"] = [position[k, s][t] for k, s, t in zip(f.type, f.destination, f.ready_t)]
     net.flights = f[["type", "leg_id", "origin", "destination", "dep_node", "arr_node",
                      "crosses", "dep_t", "arr_t", "ready_t"]]
     return net

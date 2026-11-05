@@ -9,7 +9,7 @@ from altfuel.aircraft_performance import fuel_kg
 from altfuel.cost_revenue import ownership_per_day
 from altfuel.data_layer import load_data
 from altfuel.data_layer import validate as validate_data
-from altfuel.rotation_checker import build_rotations
+from altfuel.rotation_checker import build_rotations, day_cycles
 from altfuel.scenario_config import DEFAULT_OWNERSHIP, Scenario, load_scenario, validate
 
 
@@ -313,3 +313,27 @@ def test_ownership_is_charged_per_aircraft_used(data):
     assert r.kpis["ownership_cost_usd"] == pytest.approx(sum(n * own[k] for k, n in r.result.fleet_used.items()))
     free = replace(r.scenario, aircraft_overrides={k: {"price_usd": 0} for k in data.aircraft_types.index})
     assert analysis.run(free, data).kpis["aircraft"] >= r.kpis["aircraft"]
+
+
+# Multi-day cycles
+
+def test_day_cycles_follow_aircraft_round_the_network():
+    # Three aircraft-days: LHR->CDG, CDG->AMS, AMS->LHR. One aircraft flying them
+    # in turn is back at LHR after three days.
+    rot = pd.DataFrame({"tail_id": ["T1", "T2", "T3"], "type": "KER-NB",
+                        "origin": ["LHR", "CDG", "AMS"], "destination": ["CDG", "AMS", "LHR"]})
+    cycles = day_cycles(rot)
+    assert len(cycles) == 1
+    assert cycles.days[0] == 3
+    assert cycles.nights[0] == "CDG > AMS > LHR"
+
+
+def test_chains_timetable_gives_multi_day_cycles():
+    sc = load_scenario("chains_carbon_200")
+    r = analysis.run(sc)
+    assert r.violations == []
+    assert r.kpis["longest_cycle_days"] > 1
+    # every aircraft-day belongs to exactly one cycle
+    for ac_type, n in r.result.fleet_used.items():
+        if n:
+            assert r.cycles[r.cycles.type == ac_type].days.sum() == r.rotations[r.rotations.type == ac_type].tail_id.nunique()

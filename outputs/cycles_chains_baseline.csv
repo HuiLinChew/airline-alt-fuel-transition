@@ -1,0 +1,4 @@
+type,first_rotation,days,home,nights
+KER-NB,KER-NB-01,2,LHR,MAD > LHR
+KER-NB,KER-NB-02,8,CDG,AMS > DUB > AMS > CDG > DUB > MAD > LHR > CDG
+KER-NB,KER-NB-03,1,AMS,AMS

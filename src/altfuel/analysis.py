@@ -27,6 +27,7 @@ class Run:
     result: optimiser.Result
     rotations: pd.DataFrame
     violations: list
+    cycles: pd.DataFrame        # multi-day aircraft cycles
     flown: pd.DataFrame         # the perf rows of the legs actually flown
     ownership: pd.Series        # ownership cost per aircraft for the period, by type
     kpis: dict
@@ -49,14 +50,16 @@ def run(sc: Scenario, data: Data = None) -> Run:
     net = network_builder.build_network(data, perf, sc.period_min)
     result = optimiser.solve(net, perf, drop, ownership, capacity, sc)
     rotations, violations = rotation_checker.build_rotations(data, perf, result.assign, result.fleet_used)
+    cycles = rotation_checker.day_cycles(rotations)
 
     flown = perf.reset_index().merge(result.assign.reset_index(), on=["leg_id", "type"])
     ownership = ownership * sc.period_min / 1440
-    return Run(sc, data, fuel, capacity, perf, result, rotations, violations, flown, ownership,
-               kpis(data, flown, result, drop, ownership))
+    return Run(sc, data, fuel, capacity, perf, result, rotations, violations, cycles, flown, ownership,
+               kpis(data, flown, result, drop, ownership, cycles))
 
 
-def kpis(data: Data, flown: pd.DataFrame, result, drop_cost: pd.Series, ownership: pd.Series) -> dict:
+def kpis(data: Data, flown: pd.DataFrame, result, drop_cost: pd.Series, ownership: pd.Series,
+         cycles: pd.DataFrame) -> dict:
     if result.status not in SOLVED:
         return {"status": result.status}
 
@@ -80,6 +83,7 @@ def kpis(data: Data, flown: pd.DataFrame, result, drop_cost: pd.Series, ownershi
         "ownership_cost_usd": ownership_cost,
         "spill_cost_usd": flown.spill_cost_usd.sum(),
         "dropped_revenue_usd": drop_cost.loc[dropped].sum(),
+        "longest_cycle_days": int(cycles.days.max()) if len(cycles) else 0,
     }
     out["total_cost_usd"] = (out["operating_cost_usd"] + out["ownership_cost_usd"]
                              + out["spill_cost_usd"] + out["dropped_revenue_usd"])
@@ -96,13 +100,18 @@ def kpis(data: Data, flown: pd.DataFrame, result, drop_cost: pd.Series, ownershi
 
 
 def compare(runs: list[Run]) -> pd.DataFrame:
-    """KPIs of every run, with differences from the first run (the baseline)."""
+    """KPIs of every run, with differences from its baseline: the first run on the same data."""
     table = pd.DataFrame({r.scenario.name: r.kpis for r in runs}).T
-    base = table.iloc[0]
+    first = {}
+    for r in runs:
+        first.setdefault(r.scenario.data_dir, r.scenario.name)
+    baselines = [first[r.scenario.data_dir] for r in runs]
+    base = table.loc[baselines].set_index(table.index)
+    table.insert(0, "baseline", baselines)
     for col in ["total_cost_usd", "co2_t", "energy_gj", "aircraft", "legs_dropped"]:
-        table[f"d_{col}"] = table[col].astype(float) - float(base[col])
+        table[f"d_{col}"] = table[col].astype(float) - base[col].astype(float)
     for col in ["total_cost_usd", "co2_t"]:
-        table[f"d_{col}_pct"] = 100 * table[f"d_{col}"] / float(base[col])
+        table[f"d_{col}_pct"] = 100 * table[f"d_{col}"] / base[col].astype(float)
     return table
 
 

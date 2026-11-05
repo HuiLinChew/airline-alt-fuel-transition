@@ -67,5 +67,8 @@ Total cost = operating cost + aircraft ownership + revenue lost to spilled passe
 - LH₂ takes over from LNG as the carbon price rises: 35% of legs at 200 USD/t, 55% from 300 USD/t.
 - e-methane (29 USD/GJ) costs more than LH₂ (21 USD/GJ), so it isn't chosen at these prices.
 - Airport capacity doesn't bind on this network.
+- A second timetable, `data/dummy_chains/` (`chains_*` scenarios), has aircraft ending the
+  day away from where they started: rotations then take up to 8 days to get back home.
+  The fleet assignment handles this unchanged (it only needs each airport balanced each night).
 - The drop, spill and capacity results only show the mechanisms work: crew and
   maintenance costs and the airline's capacity share are still placeholders.

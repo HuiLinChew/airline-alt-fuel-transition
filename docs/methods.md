@@ -22,7 +22,7 @@ Module numbers follow the planning sheet (FYP_Papers.xlsx, "Code modules").
 | 6 Network builder | Time-space network per type: flight, ground and wrap-around arcs | Hane et al. 1995 via Sherali et al. 2006; Kamat et al. | Done; fuel-state layers later (Randeraad) |
 | 7 Optimiser | Basic FAM: cover, balance, count (MILP, PuLP + HiGHS) | Hane et al. via Sherali et al.; Kamat et al.; Wu et al. | Done |
 | 7 Optimiser | Capacity: hourly movements ≤ limit; aircraft on the ground or turning ≤ stands | As module 2 | `check` mode by default (report only); `constrain` enforces |
-| 8 Rotation checker | Greedy first-ready matching per station after the FAM | Sherali et al., Justin et al. (FAM then routing is standard practice) | Done |
+| 8 Rotation checker | Greedy first-ready matching per station after the FAM; days joined into multi-day cycles (an aircraft ending at X flies, next day, a rotation starting at X) | Sherali et al., Justin et al. (FAM then routing is standard practice); a daily FAM's rotations can take several days to repeat (Sherali et al.) | Done; no maintenance rule (return to base every ≤ N days) yet |
 | 9 Analysis | Deltas vs all-kerosene baseline; carbon-price sweep | Peter, Sirtori, Kamat, Kinene (compare to reference case) | Done |
 | 4 Fleet stock-flow | Not built yet: fleet is fixed per scenario | Rau, Dray, Sirtori, Oesingmann | Next |
 
@@ -64,6 +64,7 @@ Module numbers follow the planning sheet (FYP_Papers.xlsx, "Code modules").
 | Ownership is charged for aircraft used, not for aircraft owned but idle | Correct for planning one schedule; the stock-flow module will charge the whole owned fleet |
 | Spilled passengers are lost, not rebooked (no recapture) | Overstates the cost of spill |
 | Runway capacity is checked per clock hour | Two flights at 06:55 and 07:05 count in different hours |
+| Rotations and multi-day cycles come from a simple greedy matching, not an optimisation | Cycle lengths are one valid answer, not the shortest; the fleet assignment itself is unaffected |
 | Inputs come from different years: route demand 2015 (Sanford), kerosene/LH₂ and carbon prices for 2050 (Hoelzen et al. 2025), LNG price 2027 (World Bank), aircraft price 2021 (IBA) | Results are illustrative until the inputs are put on one year basis |
 
 ## Methane: fossil LNG by default, e-methane by switching

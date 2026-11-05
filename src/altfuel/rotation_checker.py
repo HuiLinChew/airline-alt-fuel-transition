@@ -7,6 +7,9 @@ an optimisation.
 
 It flags two problems: needing more aircraft than the optimiser counted, and
 aircraft ending the day somewhere other than where the next day's flights start.
+
+day_cycles then joins the days together: an aircraft may end the day away from
+where it started and take several days to get back (a multi-day cycle).
 """
 
 from collections import Counter
@@ -48,4 +51,49 @@ def build_rotations(data: Data, perf: pd.DataFrame, assign: pd.DataFrame, fleet_
         if Counter(first_station.values()) != Counter(last_station.values()):
             problems.append(f"{ac_type}: aircraft end the day where the next day's flights don't start")
 
-    return pd.DataFrame(rows), problems
+    columns = ["tail_id", "type", "leg_id", "origin", "destination", "dep_min", "arr_min"]
+    return pd.DataFrame(rows, columns=columns), problems
+
+
+def day_cycles(rotations: pd.DataFrame) -> pd.DataFrame:
+    """Join one day's rotations into multi-day cycles.
+
+    An aircraft that ends the day at X flies, the next day, the rotation of an
+    aircraft that started the day at X. Following that chain until it comes back
+    to its first rotation gives a cycle: the number of days an aircraft takes to
+    get back to where it started, and where it spends each night. The matching is
+    one valid choice; an airline would pick the one that suits its maintenance
+    bases (maintenance routing).
+    """
+    rows = []
+    for ac_type, rot in rotations.groupby("type"):
+        days = rot.groupby("tail_id", sort=False)
+        start = days.origin.first()
+        end = days.destination.last()
+        if sorted(start) != sorted(end):
+            continue                     # already flagged by build_rotations
+
+        # An aircraft back where it started keeps its own rotation; the rest are
+        # matched in tail order with the rotations starting where they ended.
+        next_day = {tail: tail for tail in start.index if start[tail] == end[tail]}
+        starting_at = {}
+        for tail, station in start.items():
+            if tail not in next_day:
+                starting_at.setdefault(station, []).append(tail)
+        for tail, station in end.items():
+            if tail not in next_day:
+                next_day[tail] = starting_at[station].pop(0)
+
+        seen = set()
+        for first in start.index:
+            if first in seen:
+                continue
+            nights = []
+            tail = first
+            while tail not in seen:
+                seen.add(tail)
+                nights.append(end[tail])
+                tail = next_day[tail]
+            rows.append({"type": ac_type, "first_rotation": first, "days": len(nights),
+                         "home": start[first], "nights": " > ".join(nights)})
+    return pd.DataFrame(rows, columns=["type", "first_rotation", "days", "home", "nights"])

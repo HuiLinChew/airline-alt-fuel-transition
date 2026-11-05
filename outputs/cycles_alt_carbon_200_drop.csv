@@ -1,0 +1,5 @@
+type,first_rotation,days,home,nights
+CH4-NB,CH4-NB-01,2,AMS,LHR > AMS
+CH4-NB,CH4-NB-02,1,CDG,CDG
+CH4-NB,CH4-NB-03,1,CDG,CDG
+CH4-NB,CH4-NB-04,1,DUB,DUB

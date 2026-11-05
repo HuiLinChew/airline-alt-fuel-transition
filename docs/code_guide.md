@@ -5,7 +5,7 @@ What each file does, how they connect, and how the optimiser works.
 ## How it fits together
 
 ```
-scripts/make_dummy_data.py  ->  data/dummy/*.csv   (run once)
+scripts/make_dummy_data.py  ->  data/dummy/*.csv, data/dummy_chains/*.csv   (run once)
 
 scenarios/*.yaml  ->  scenario_config
 data/dummy/*.csv  ->  data_layer
@@ -25,6 +25,11 @@ data/dummy/*.csv  ->  data_layer
 ## Files
 
 ### Inputs (`data/dummy/`)
+Two dummy timetables share the same airports, aircraft and fuels:
+`data/dummy/` (out-and-back pairs) and `data/dummy_chains/` (chains such as
+LHR→CDG→MAD→LHR, where aircraft end the day away from where they started; used by the
+`chains_*` scenarios). Each scenario is compared with the first scenario on the same data.
+
 | File | Contents |
 |---|---|
 | `airports.csv` | Station, coordinates, tier, runways, stands, hourly runway capacity (Henry's database) |
@@ -144,3 +149,9 @@ For each type, it goes through the legs in departure order and gives each one th
 aircraft at the origin that has been ready longest, or a new aircraft if none is
 ready. It flags it if this needs more aircraft than the optimiser counted, or if
 aircraft end the day somewhere other than where the next day's flights start.
+
+`day_cycles` then joins the days: an aircraft that ends the day at X flies, the next
+day, a rotation that starts at X (its own, if it's back where it started). Following
+this until it comes back gives each aircraft's cycle: how many days until it's home
+again, and where it spends each night (`outputs/cycles_<scenario>.csv`,
+KPI `longest_cycle_days`).

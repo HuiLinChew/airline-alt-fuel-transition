@@ -11,6 +11,8 @@ built are in `methods.md`.
 | Fleet stock-flow (module 4) | Fleet changes year by year (retirements, deliveries) instead of a fixed fleet per scenario | Rau, Dray, Sirtori, Oesingmann. Ownership would then be charged on the whole owned fleet |
 | Split hourly cost | Crew vs maintenance instead of one 3,000 $/h placeholder | Crew ≈ 940 $/block h from Hoelzen salaries; needs a sourced maintenance base (Hoelzen gives +11% for LH₂ but not the cost burden) |
 | Spill recapture | Spilled passengers rebook onto other flights | Currently all lost, which overstates spill cost |
+| Maintenance routing | Rule that every aircraft returns to a maintenance base every ≤ N days; choose rotations to keep cycles short | Cycles are now reported (`day_cycles`) but come from a greedy matching. Becomes important with tankering: an LH₂ aircraft parked overnight at a non-LH₂ airport has the boil-off problem |
+| Schedule design (discuss with Maria) | Let the model choose which flights to operate, not just which type flies each: give it candidate flights (out-and-backs and chains) and require each airport pair's daily passengers to be carried by some of them | Lohatepanont & Barnhart 2004 (integrated schedule design and fleet assignment). Then LH₂ airport limits and turn times reshape the network itself, e.g. picking chains only where they beat back-and-forth. Bigger model: demand becomes a constraint and there are many more candidate flights |
 | Absorption factor | Overflow at a capacity-limited airport rerouted (Hasan) | Capacity is currently check or hard limit only |
 | Weekly schedules | Use `period_min: 10080` with real weekly timetables | Already supported and tested |
 
@@ -26,6 +28,22 @@ built are in `methods.md`.
 | Airline capacity share | Placeholder 15% |
 | Real timetable (OpenSky / ADS-B) | Replaces the dummy 40 legs |
 | Inputs on one year basis | Demand 2015, prices 2027/2050, aircraft price 2021 |
+
+## What Maria's aircraft data will replace
+
+Maria can provide non-linear aircraft characteristics for all fuels. Exactly which
+quantities is still to confirm with her; the likely replacements in `aircraft_types.csv`:
+
+| Now | Current source | Replaced by | How it goes in |
+|---|---|---|---|
+| `fuel_kg_fixed`, `fuel_kg_per_km` (straight-line fuel burn) | Fit to Henry's short-haul curves via Hasan | Her fuel-vs-distance curves | Rows in `fuel_burn.csv`; the code then interpolates them instead of using the line. No code change |
+| Methane fuel burn = kerosene × 1.10 energy | Rompokos et al. 2020 | Her methane curve | Same as above |
+| `range_km` | LH₂ 2,778 km (Hoelzen 2025); kerosene 6,000 and methane 5,000 approx. | Her ranges | Edit the CSV. The end of her fuel table also acts as a range limit |
+| `seats` (180 for all) | Hoelzen 2025 design PAX | Her seat counts (LH₂ may lose seats to tanks) | Edit the CSV |
+| `cruise_kmh` (830 for all) | Hoelzen 2025, Mach 0.78 | Her cruise speeds | Edit the CSV; block times adjust automatically |
+
+Not expected from her (still to source elsewhere): `price_usd`, `cost_per_block_hour`,
+`turn_min`, refuelling rates.
 
 ## Interactive exploration (marimo)
 

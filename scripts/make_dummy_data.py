@@ -34,6 +34,9 @@ FIRST_DEP, LAST_ARR = 390, 1350  # schedule window, minutes after midnight (06:3
 TIER = {"INT": 1, "MAJ": 2, "SMA": 3}   # placeholder until the tier 1-6 mapping is defined
 KER_PRICE_USD = 49.4e6    # new-delivery A320neo market value, IBA (Nov 2021)
 LH2_PRICE_FACTOR = 1.12   # +12% aircraft CAPEX, short-range LH2 aircraft (Hoelzen et al. 2022)
+CREW_PER_BLOCK_HOUR = 940          # USD, same for all types (from Hoelzen et al. 2022 salaries)
+MAINT_PER_BLOCK_HOUR = 2060        # USD, kerosene. Placeholder: keeps crew + maintenance at 3,000
+LH2_MAINT_FACTOR = 1.0             # same as kerosene for now; Hoelzen et al. 2022 give +11% (short-range)
 CRUISE_KMH = 830          # same for all types: Hoelzen et al. 2025 design Mach 0.78 for both
                           # kerosene and LH2 single-aisle designs; also used to time the schedule
 CHAIN_TURN = 60           # minutes on the ground between legs in the chains timetable
@@ -140,8 +143,8 @@ def build_aircraft_types():
     """Fuel burn is a linear fit (fixed + per km) to Henry's short-haul range-fuel
     curves as used by Hasan (aircraft_data.csv, R^2 > 0.999 over 0-3000 km).
     Methane: kerosene energy +10% (Rompokos et al. 2020) at LHV 50 MJ/kg.
-    Refuel pumps: narrowbody = 2 (Al-Timimi, after FlyZero). Hourly cost (crew +
-    maintenance per block hour): placeholder, same for all types until sourced.
+    Refuel pumps: narrowbody = 2 (Al-Timimi, after FlyZero). Crew cost is the same for
+    all types; maintenance is a placeholder base, also the same for all types for now.
     A type can instead use a burn-vs-distance table in fuel_burn.csv (see README)."""
     curves = read(RAW / "aircraft_data.csv")
     curves = curves[curves.range_km <= 3000]
@@ -151,15 +154,19 @@ def build_aircraft_types():
     ch4 = 1.10 * 43.2 / 50.0   # kerosene kg -> methane kg at +10% energy
     return pd.DataFrame([
         dict(type="KER-NB", fuel="kerosene", seats=SEATS, max_load_factor=LOAD_FACTOR,
-             range_km=6000, turn_min=40, refuel_pumps=2, cost_per_block_hour=3000, cruise_kmh=CRUISE_KMH,
+             range_km=6000, turn_min=40, refuel_pumps=2, cruise_kmh=CRUISE_KMH,
+             crew_cost_per_block_hour=CREW_PER_BLOCK_HOUR, maintenance_cost_per_block_hour=MAINT_PER_BLOCK_HOUR,
              price_usd=KER_PRICE_USD, fuel_kg_fixed=ker_fixed, fuel_kg_per_km=ker_per_km,
              source="A320-class; fuel: Sanford/Al-Timimi SH curve; turn: Akinola et al. 2025; price: IBA 2021"),
         dict(type="LH2-NB", fuel="lh2", seats=SEATS, max_load_factor=LOAD_FACTOR,
-             range_km=2778, turn_min=40, refuel_pumps=2, cost_per_block_hour=3000, cruise_kmh=CRUISE_KMH,
+             range_km=2778, turn_min=40, refuel_pumps=2, cruise_kmh=CRUISE_KMH,
+             crew_cost_per_block_hour=CREW_PER_BLOCK_HOUR,
+             maintenance_cost_per_block_hour=MAINT_PER_BLOCK_HOUR * LH2_MAINT_FACTOR,
              price_usd=KER_PRICE_USD * LH2_PRICE_FACTOR, fuel_kg_fixed=lh2_fixed, fuel_kg_per_km=lh2_per_km,
              source="Hoelzen et al. 2025 SA-1500 (1500 NM); fuel: Sanford/Al-Timimi SH curve; price +12% Hoelzen et al. 2022"),
         dict(type="CH4-NB", fuel="ch4", seats=SEATS, max_load_factor=LOAD_FACTOR,
-             range_km=5000, turn_min=40, refuel_pumps=2, cost_per_block_hour=3000, cruise_kmh=CRUISE_KMH,
+             range_km=5000, turn_min=40, refuel_pumps=2, cruise_kmh=CRUISE_KMH,
+             crew_cost_per_block_hour=CREW_PER_BLOCK_HOUR, maintenance_cost_per_block_hour=MAINT_PER_BLOCK_HOUR,
              price_usd=KER_PRICE_USD, fuel_kg_fixed=ker_fixed * ch4, fuel_kg_per_km=ker_per_km * ch4,
              source="Rompokos et al. 2020 LNG 737-800 retrofit (+10% energy); fuel ch4 = fossil LNG (switch to ch4_e for e-methane); range approx.; price: kerosene price, no LNG premium sourced (gap)"),
     ]).round(4)

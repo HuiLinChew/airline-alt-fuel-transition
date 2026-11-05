@@ -7,12 +7,13 @@ built are in `methods.md`.
 
 | Item | What | Notes |
 |---|---|---|
-| Tankering + boil-off | Fuel-state layers in the time-space network, so an aircraft can carry fuel for the return leg | Randeraad et al. (time-space-fuel network); Sirtori et al. (half-range rule). Default: no fuel held overnight (LH₂ aircraft end the day at LH₂ airports); optimistic case (held overnight) as a setting. `max_hold_min` unlimited until sourced. Multiplies model size ×3–5 |
+| Tankering + boil-off (chosen: fuel bands) | Time-space-fuel network (Randeraad et al.): each node also has a fuel state = range left on board, in bands (e.g. 0, 500, 1,000 … km; band size a scenario setting). A flight moves the aircraft from band s to s − its distance, rounded down to be safe; at an airport with the fuel it can refuel to any band up to full; at one without it can only use what's on board | Replaces "fuel at origin" (refuel before every departure). Checks distance exactly (to band size) for any chain of legs, so multi-leg tankering comes for free. Cost: extra fuel burnt to carry fuel (rule of thumb for kerosene ~2.5–4% of carried fuel per flight hour; LH₂ value to source, maybe Maria's data). Boil-off default: no fuel held overnight (wrap-round ground arcs only in the empty band), so LH₂ aircraft end the day at LH₂ airports; optimistic case (held overnight) as a setting. In-day `max_hold_min` unlimited until sourced. Size: × number of bands (LH₂ 2,778 km at 500 km ≈ 6), roughly 10–30 s at 2,000 legs. Mostly a network_builder change; the optimiser gets one balance constraint per band. Rejected: a 2-state "fuel for one more leg" version, which can't tell a short next leg from a long one |
 | Fleet stock-flow (module 4) | Fleet changes year by year (retirements, deliveries) instead of a fixed fleet per scenario | Rau, Dray, Sirtori, Oesingmann. Ownership would then be charged on the whole owned fleet |
-| Split hourly cost | Crew vs maintenance instead of one 3,000 $/h placeholder | Crew ≈ 940 $/block h from Hoelzen salaries; needs a sourced maintenance base (Hoelzen gives +11% for LH₂ but not the cost burden) |
+| Maintenance base | Source the kerosene maintenance cost per block hour (now a 2,060 $/h placeholder) and the methane difference | Split from crew is done (crew 940 $/h); maintenance is the same for all types for now. To apply: LH₂ +11% (Hoelzen et al. 2022) via `LH2_MAINT_FACTOR`, which moves LH₂'s entry from 200 to 250 $/t. A320-class engineering cost studies should give the base |
 | Spill recapture | Spilled passengers rebook onto other flights | Currently all lost, which overstates spill cost |
 | Maintenance routing | Rule that every aircraft returns to a maintenance base every ≤ N days; choose rotations to keep cycles short | Cycles are now reported (`day_cycles`) but come from a greedy matching. Becomes important with tankering: an LH₂ aircraft parked overnight at a non-LH₂ airport has the boil-off problem |
 | Schedule design (discuss with Maria) | Let the model choose which flights to operate, not just which type flies each: give it candidate flights (out-and-backs and chains) and require each airport pair's daily passengers to be carried by some of them | Lohatepanont & Barnhart 2004 (integrated schedule design and fleet assignment). Then LH₂ airport limits and turn times reshape the network itself, e.g. picking chains only where they beat back-and-forth. Bigger model: demand becomes a constraint and there are many more candidate flights |
+| Airport capacity share | Replace the flat 15% with a per-airport share: limit = airline's current share at that airport × the airport's capacity in that year | Shares are sticky because of EU slot grandfather rights (80/20 use-it-or-lose-it), so when a hub fills up everyone's growth stops, not just ours. Current share from OpenSky (airline movements ÷ all movements) or slot coordinator data (e.g. ACL); capacity from Henry's data plus planned expansions. Demand above the limit → spill, drops or Hasan's absorption factor. Rejected: residual capacity (capacity − other airlines' traffic), which squeezes our airline to zero at hubs as demand grows. Gaps in share data: simple regression on base/hub status, airport size, distance from base; sensitivity sweep on the share. `capacity_share` already accepts a dict, so this is a small change in `airport_capacity` |
 | Absorption factor | Overflow at a capacity-limited airport rerouted (Hasan) | Capacity is currently check or hard limit only |
 | Weekly schedules | Use `period_min: 10080` with real weekly timetables | Already supported and tested |
 
@@ -25,7 +26,7 @@ built are in `methods.md`.
 | Well-to-tank CO₂ per fuel and production route | Placeholder 0 (e-methane −2.75) |
 | Maria's fuel-burn curves | Drop into `fuel_burn.csv`; replaces the straight-line fit |
 | Airport tier mapping (1–6) and tier price factors | Placeholders |
-| Airline capacity share | Placeholder 15% |
+| Airline share of each airport's capacity | Placeholder 15%; method in the Model table above (current share × future capacity) |
 | Real timetable (OpenSky / ADS-B) | Replaces the dummy 40 legs |
 | Inputs on one year basis | Demand 2015, prices 2027/2050, aircraft price 2021 |
 
@@ -42,7 +43,7 @@ quantities is still to confirm with her; the likely replacements in `aircraft_ty
 | `seats` (180 for all) | Hoelzen 2025 design PAX | Her seat counts (LH₂ may lose seats to tanks) | Edit the CSV |
 | `cruise_kmh` (830 for all) | Hoelzen 2025, Mach 0.78 | Her cruise speeds | Edit the CSV; block times adjust automatically |
 
-Not expected from her (still to source elsewhere): `price_usd`, `cost_per_block_hour`,
+Not expected from her (still to source elsewhere): `price_usd`, crew and maintenance costs,
 `turn_min`, refuelling rates.
 
 ## Interactive exploration (marimo)

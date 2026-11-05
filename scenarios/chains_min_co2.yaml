@@ -1,0 +1,8 @@
+# As alt_min_co2, on the chains timetable.
+name: chains_min_co2
+description: Chains timetable, LH2 and CH4 aircraft available, minimise CO2
+data_dir: data/dummy_chains
+objective: co2
+fleet: {KER-NB: 30, LH2-NB: 6, CH4-NB: 6}
+fuel_max_tier: {lh2: 1, ch4: 2}
+wtt_co2_kg_per_kg: {kerosene: 0, lh2: 0, ch4: 0}   # well-to-tank CO2 (kg per kg fuel), 0 until sourced

@@ -34,7 +34,7 @@ LHR→CDG→MAD→LHR, where aircraft end the day away from where they started; 
 |---|---|
 | `airports.csv` | Station, coordinates, tier, runways, stands, hourly runway capacity (Henry's database) |
 | `legs.csv` | The timetable: `leg_id`, origin, destination, `dep_min`, `arr_min` (minutes from the start of the period), distance, passengers, and optionally `fare_usd` |
-| `aircraft_types.csv` | Per type: fuel, seats, max load factor, range, turn time, refuel pumps, cost per block hour, cruise speed, price, fuel burn (`fuel_kg_fixed + fuel_kg_per_km × distance`) |
+| `aircraft_types.csv` | Per type: fuel, seats, max load factor, range, turn time, refuel pumps, crew and maintenance cost per block hour, cruise speed, price, fuel burn (`fuel_kg_fixed + fuel_kg_per_km × distance`) |
 | `fuel_burn.csv` | Optional. A fuel-vs-distance table for any type that shouldn't use the straight line (e.g. Maria's curves) |
 | `fuels.csv` | Per fuel: energy content, CO₂ when burnt, default well-to-tank CO₂, share of CO₂ that pays the carbon price, price, which tiers have it by default, refuelling rates. Rows: kerosene, LH₂, fossil LNG (`ch4`), e-methane (`ch4_e`) |
 

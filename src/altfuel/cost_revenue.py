@@ -1,6 +1,7 @@
 """Module 5: the cost of each (type, leg), and of dropping a leg or owning an aircraft.
 
     c          = fuel cost + carbon cost + hourly cost + spilled passengers x fare
+    hourly     = block hours x (crew + maintenance cost per block hour)
     drop cost  = passengers x fare
     ownership  = aircraft price x (annuity + insurance) / 365, per aircraft per day
 
@@ -28,7 +29,8 @@ def add_costs(perf: pd.DataFrame, data: Data, airport_fuel: pd.DataFrame, sc: Sc
     share = data.fuels.carbon_price_share.reindex(p.fuel).to_numpy()
     p["carbon_cost_usd"] = p.co2_ttw_t * sc.carbon_price * share
 
-    hourly = data.aircraft_types.cost_per_block_hour.reindex(types).to_numpy()
+    aircraft = data.aircraft_types.reindex(types)
+    hourly = (aircraft.crew_cost_per_block_hour + aircraft.maintenance_cost_per_block_hour).to_numpy()
     p["hourly_cost_usd"] = p.block_min / 60 * hourly
     p["spill_cost_usd"] = p.spill_pax * fare_per_pax(data, sc).loc[leg_ids].to_numpy()
 

@@ -53,7 +53,7 @@ Methane = fossil LNG (e-methane available as a switch).
 | `baseline` (kerosene) | 9 | 100 / 0 / 0% | — | — |
 | `alt_min_energy` | 9 | 100 / 0 / 0% | 0% | 0% |
 | `alt_carbon_200` | 9 | 0 / 35 / 65% | −54% | +18% |
-| `alt_carbon_200_emethane` | 9 | 45 / 55 / 0% | −59% | +21% |
+| `alt_carbon_200_emethane` (methane aircraft on e-methane) | 9 | 45 / 55 / 0% | −59% | +21% |
 | `alt_carbon_200_spill` (150-seat LH₂, spill allowed) | 9 | 5 / 25 / 70% | −38% | +18% |
 | `alt_carbon_200_drop` (legs may be dropped) | 5 | 0 / 0 / 100% | −41% | +6% |
 | `alt_min_co2` | 10 | 0 / 65 / 35% | −72% | +16% |
@@ -65,6 +65,8 @@ Total cost = operating cost + aircraft ownership + revenue lost to spilled passe
   sourced price premium for LNG aircraft yet (it's 0%). At +5% the LNG share halves,
   and at +12% it disappears, so methane results shouldn't be used until this is sourced.
 - LH₂ takes over from LNG as the carbon price rises: 35% of legs at 200 USD/t, 55% from 300 USD/t.
+  The switch point is sensitive to placeholder costs: LH₂'s +11% maintenance (Hoelzen et al. 2022,
+  not applied yet) would move it to 250 USD/t.
 - e-methane (29 USD/GJ) costs more than LH₂ (21 USD/GJ), so it isn't chosen at these prices.
 - Airport capacity doesn't bind on this network.
 - A second timetable, `data/dummy_chains/` (`chains_*` scenarios), has aircraft ending the

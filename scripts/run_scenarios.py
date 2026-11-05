@@ -46,7 +46,7 @@ def main():
             parameter = sc.sweep["parameter"]
             results = analysis.sweep(sc, parameter, sc.sweep["values"])
             results.round(3).to_csv(OUTPUT_DIR / f"sweep_{sc.name}_{parameter}.csv", index=False)
-            save(plots.sweep_chart(results, parameter, sc.name), f"sweep_{sc.name}_{parameter}")
+            save(plots.sweep_chart(results, parameter, sc.name, r.data.fuels), f"sweep_{sc.name}_{parameter}")
 
     analysis.compare(runs).round(3).to_csv(OUTPUT_DIR / "scenario_summary.csv")
 

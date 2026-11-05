@@ -12,6 +12,7 @@ from matplotlib.patches import FancyArrowPatch, Patch
 
 COLOURS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
 BLACK, GREY, LIGHT_GREY, BACKGROUND = "#0b0b0b", "#52514e", "#e4e3df", "#fcfcfb"
+LABEL_DIRECTION = {"LHR": (-1, -0.7), "DUB": (-0.35, 1)}   # hand-placed for the dummy network
 UNITS = {"carbon_price": "USD per t CO₂", "yield_usd_per_pax_km": "USD per pax-km"}
 
 plt.rcParams.update({
@@ -41,24 +42,33 @@ def network_map(run):
     flown["pair"] = [tuple(sorted(p)) for p in zip(flown.origin, flown.destination)]
 
     fig, ax = plt.subplots(figsize=(8.5, 6))
+    lines = []
     for (pair, fuel), n in flown.groupby(["pair", "fuel"]).size().items():
         start = airports.loc[pair[0], ["lon", "lat"]].to_numpy()
         end = airports.loc[pair[1], ["lon", "lat"]].to_numpy()
         bend = 0.08 + 0.12 * fuels.index(fuel)     # so two fuels on one route don't overlap
         ax.add_patch(FancyArrowPatch(start, end, arrowstyle="-", color=colour[fuel], lw=0.6 + 0.45 * n,
                                      connectionstyle=f"arc3,rad={bend}"))
+        lines.append((start, end, bend, fuel, n))
     ax.scatter(airports.lon, airports.lat, s=90, c=BACKGROUND, edgecolors=BLACK, lw=1.5, zorder=3)
 
-    # Label each airport with its tier and the fuels it offers (except fuels offered everywhere)
+    # Label each airport with its tier and the fuels it offers (except fuels offered
+    # everywhere), on the side facing away from the middle of the network, where there
+    # are fewest lines. LABEL_DIRECTION overrides this for airports in the middle.
     everywhere = [f for f in fuels if run.airport_fuel.xs(f, level="fuel").available.all()]
+    middle = airports[["lon", "lat"]].mean().to_numpy()
     for station, airport in airports.iterrows():
         offered = [label[f] for f in fuels
                    if f not in everywhere and run.airport_fuel.loc[(station, f), "available"]]
+        away = np.array(LABEL_DIRECTION.get(station, [airport.lon, airport.lat] - middle), dtype=float)
+        away = away / np.hypot(*away)
+        ha = "center" if abs(away[0]) < 0.4 else ("left" if away[0] > 0 else "right")
         ax.annotate(f"{station} (tier {airport.tier})\n{' · '.join(offered)}", (airport.lon, airport.lat),
-                    xytext=(9, 6), textcoords="offset points", fontsize=8.5, zorder=4)
+                    xytext=14 * away, textcoords="offset points", fontsize=8.5, zorder=6,
+                    ha=ha, va="bottom" if away[1] >= 0 else "top", linespacing=1.1)
 
     ax.set_aspect(1 / np.cos(np.radians(airports.lat.mean())))
-    ax.margins(0.18)
+    ax.margins(x=0.4, y=0.25)
     ax.set_xlabel("Longitude (°)")
     ax.set_ylabel("Latitude (°)")
     add_grid(ax)
@@ -68,11 +78,28 @@ def network_map(run):
     ax.legend(handles=handles, loc="lower left", bbox_to_anchor=(1.04, 0), frameon=False, fontsize=8.5)
 
     ax.set_title(f"{run.scenario.name}: {run.kpis['legs_flown']} legs, {run.kpis['aircraft']} aircraft",
-                 loc="left", fontsize=11, pad=22)
+                 loc="left", fontsize=11, pad=30)
     note = f" (offered everywhere: {', '.join(label[f] for f in everywhere)})" if everywhere else ""
-    ax.text(0, 1.015, f"Labels: airport tier and fuels offered{note}", transform=ax.transAxes,
-            fontsize=8, color=GREY, va="bottom")
+    ax.text(0, 1.015, f"Numbers: legs per day on each line, both directions\n"
+                      f"Labels: airport tier and fuels offered{note}",
+            transform=ax.transAxes, fontsize=8, color=GREY, va="bottom")
     fig.tight_layout()
+
+    # Number of legs on each line, placed on its curve. The curves are bent in screen
+    # space, so positions are worked out there once the layout is final. Each fuel's
+    # number sits at a different point along the curve, so two fuels on a short route
+    # don't put their numbers on top of each other.
+    fig.canvas.draw()
+    to_screen, to_data = ax.transData, ax.transData.inverted()
+    for start, end, bend, fuel, n in lines:
+        a, b = to_screen.transform(start), to_screen.transform(end)
+        dx, dy = b - a
+        control = (a + b) / 2 + bend * np.array([dy, -dx])        # control point of the arc3 curve
+        t = 0.35 + 0.15 * (fuels.index(fuel) % 3)
+        point = (1 - t) ** 2 * a + 2 * (1 - t) * t * control + t ** 2 * b
+        ax.text(*to_data.transform(point), str(n), ha="center", va="center", fontsize=7,
+                color=colour[fuel], fontweight="bold", zorder=7,
+                bbox=dict(boxstyle="circle,pad=0.2", fc=BACKGROUND, ec=colour[fuel], lw=0.8))
     return fig
 
 
@@ -158,15 +185,20 @@ def scenario_comparison(runs):
     return fig
 
 
-def sweep_chart(sweep: pd.DataFrame, parameter: str, scenario_name: str):
-    """Share of legs not flown on kerosene, against the swept setting."""
+def sweep_chart(sweep: pd.DataFrame, parameter: str, scenario_name: str, fuels: pd.DataFrame):
+    """Share of legs flown on each fuel, against the swept setting."""
+    colour = fuel_colours(fuels)
     fig, ax = plt.subplots(figsize=(7, 4))
-    ax.plot(sweep[parameter], 100 * (1 - sweep["share_kerosene"]), color=COLOURS[1],
-            lw=2, marker="o", ms=8, mec=BACKGROUND, mew=2)
+    for fuel in colour:
+        share = sweep.get(f"share_{fuel}")
+        if share is not None and share.any():
+            ax.plot(sweep[parameter], 100 * share, color=colour[fuel], lw=2, marker="o", ms=7,
+                    mec=BACKGROUND, mew=2, label=fuels.label[fuel])
     unit = f" ({UNITS[parameter]})" if parameter in UNITS else ""
     ax.set_xlabel(parameter.replace("_", " ").capitalize() + unit)
-    ax.set_ylabel("Legs flown on alternative fuel (%)")
-    ax.set_ylim(0, 100)
+    ax.set_ylabel("Legs flown (%)")
+    ax.set_ylim(-3, 103)
+    ax.legend(frameon=False, fontsize=8.5)
     add_grid(ax)
     ax.set_title(f"Sweep of {parameter} ({scenario_name})", loc="left", fontsize=11)
     fig.tight_layout()

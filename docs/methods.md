@@ -44,7 +44,8 @@ Module numbers follow the planning sheet (FYP_Papers.xlsx, "Code modules").
 | Fare (yield) | 0.148 USD per pax-km | Proesmans et al. 2023, Table 3 |
 | Cruise speed (all types) | 830 km/h | Hoelzen et al. 2025: design Mach 0.78 for kerosene and LH2 single-aisle designs |
 | Well-to-tank CO2 | 0 (placeholder) | To source per fuel and production route (fossil LNG vs e-methane; grey vs green LH2) |
-| Hourly cost (crew + maintenance) | 3,000 USD/block hour, all types | Placeholder. Hoelzen et al. 2022 give +11% maintenance for LH2 (short-range) and Thorbeck's per-flight equations, but not the cost burden B needed to use them |
+| Crew cost | 940 USD/block hour, all types | Derived from Hoelzen et al. 2022 salaries. Same for every type, so it only matters for dropped legs and fleet-size differences |
+| Maintenance cost | 2,060 USD/block hour, all types | Placeholder (keeps crew + maintenance at 3,000). Differences not applied yet: Hoelzen et al. 2022 give +11% for LH₂ (short-range), which moves LH₂'s entry from 200 to 250 USD/t; methane difference not sourced |
 | Base turn time | 40 min | Akinola et al. 2025 (short turnaround) |
 | LH2 refuel: plug in/out, flow | 5 + 4 min, 2 pumps × 5 kg/s | Al-Timimi (`parameters.py`) |
 | Kerosene refuel: plug in/out, flow | 2 + 2 min, 2 pumps × 20 kg/s | Al-Timimi |

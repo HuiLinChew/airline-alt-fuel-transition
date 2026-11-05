@@ -231,7 +231,9 @@ def test_without_spill_a_small_aircraft_cannot_take_a_full_leg(data):
 
 
 def test_spill_is_charged_at_the_fare(data):
-    sc = replace(load_scenario("alt_carbon_200_spill"), fleet={"KER-NB": 30, "LH2-NB": 6})
+    # Only one type, with 150 seats, so full legs must spill
+    sc = replace(load_scenario("alt_carbon_200_spill"), fleet={"KER-NB": 30},
+                 aircraft_overrides={"KER-NB": {"seats": 150}})
     r = analysis.run(sc, data)
     spilled = r.flown[r.flown.spill_pax > 0]
     assert len(spilled) > 0

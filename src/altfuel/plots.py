@@ -4,14 +4,20 @@ Each fuel gets the colour at its row number in fuels.csv, so it keeps the same
 colour in every figure.
 """
 
+import json
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.lines import Line2D
-from matplotlib.patches import FancyArrowPatch, Patch
+from matplotlib.patches import FancyArrowPatch, Patch, Polygon
+
+from .utils import ROOT
 
 COLOURS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
 BLACK, GREY, LIGHT_GREY, BACKGROUND = "#0b0b0b", "#52514e", "#e4e3df", "#fcfcfb"
+LAND, BORDER = "#efeee9", "#d3d1cb"
+LAND_FILE = ROOT / "data" / "europe_outline.geojson"   # coastlines and borders (GSHHG)
 LABEL_DIRECTION = {"LHR": (-1, -0.7), "DUB": (-0.35, 1)}   # hand-placed for the dummy network
 UNITS = {"carbon_price": "USD per t CO₂", "yield_usd_per_pax_km": "USD per pax-km"}
 
@@ -31,8 +37,22 @@ def add_grid(ax, axis="both"):
     ax.set_axisbelow(True)
 
 
-def network_map(run):
-    """One curved line per airport pair and fuel; thicker = more legs."""
+def draw_land(ax):
+    """Land shapes and country borders under the network, from LAND_FILE."""
+    with open(LAND_FILE) as f:
+        features = json.load(f)["features"]
+    for feature in features:
+        points = feature["geometry"]["coordinates"]
+        if feature["properties"]["kind"] == "land":
+            ax.add_patch(Polygon(points[0], closed=True, fc=LAND, ec=BORDER, lw=0.5, zorder=0))
+        else:
+            lon, lat = zip(*points)
+            ax.plot(lon, lat, color=BORDER, lw=0.5, zorder=0.5)
+
+
+def network_map(run, background=True):
+    """One curved line per airport pair and fuel; thicker = more legs.
+    background=False gives a plain latitude/longitude grid instead of the map."""
     airports = run.data.airports
     colour = fuel_colours(run.data.fuels)
     label = run.data.fuels.label
@@ -67,11 +87,24 @@ def network_map(run):
                     xytext=14 * away, textcoords="offset points", fontsize=8.5, zorder=6,
                     ha=ha, va="bottom" if away[1] >= 0 else "top", linespacing=1.1)
 
-    ax.set_aspect(1 / np.cos(np.radians(airports.lat.mean())))
-    ax.margins(x=0.4, y=0.25)
-    ax.set_xlabel("Longitude (°)")
-    ax.set_ylabel("Latitude (°)")
-    add_grid(ax)
+    # Frame the airports with some space around them, then put the map underneath
+    lon, lat = airports.lon, airports.lat
+    pad_lon, pad_lat = 0.4 * (lon.max() - lon.min()), 0.25 * (lat.max() - lat.min())
+    ax.set_xlim(lon.min() - pad_lon, lon.max() + pad_lon)
+    ax.set_ylim(lat.min() - pad_lat, lat.max() + pad_lat)
+    ax.set_aspect(1 / np.cos(np.radians(lat.mean())))
+    if background:
+        draw_land(ax)
+        ax.set_facecolor("#f7fafc")                  # sea
+        ax.set_xticks([])
+        ax.set_yticks([])
+        for spine in ax.spines.values():
+            spine.set_visible(True)
+            spine.set_color(LIGHT_GREY)
+    else:
+        ax.set_xlabel("Longitude (°)")
+        ax.set_ylabel("Latitude (°)")
+        add_grid(ax)
 
     handles = [Line2D([], [], color=colour[f], lw=3, label=label[f]) for f in fuels if f in set(flown.fuel)]
     handles += [Line2D([], [], color=GREY, lw=0.6 + 0.45 * n, label=f"{n} legs") for n in (2, 6)]

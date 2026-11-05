@@ -40,6 +40,7 @@ def main():
         if len(r.result.capacity):
             r.result.capacity.round(3).to_csv(OUTPUT_DIR / f"capacity_{sc.name}.csv", index=False)
         save(plots.network_map(r), f"network_{sc.name}")
+        save(plots.network_map(r, background=False), f"network_{sc.name}_plain")
         save(plots.tail_gantt(r), f"gantt_{sc.name}")
 
         if sc.sweep:

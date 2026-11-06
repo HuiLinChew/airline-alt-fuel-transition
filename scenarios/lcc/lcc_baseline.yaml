@@ -1,0 +1,8 @@
+# Low-cost-carrier style network (bases DUB and MAD), kerosene only.
+name: lcc_baseline
+description: Low-cost timetable, kerosene only, aircraft spend the night at a base
+data_dir: data/dummy_lcc
+objective: cost
+wtt_co2_kg_per_kg: {kerosene: 0, lh2: 0, ch4: 0}   # well-to-tank CO2 (kg per kg fuel), 0 until sourced
+fleet: {KER-NB: 100}   # kerosene only, no cap
+overnight_at_bases: true

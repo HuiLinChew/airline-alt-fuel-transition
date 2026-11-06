@@ -1,0 +1,8 @@
+# Kerosene only, on the chains timetable with random ground times between legs.
+name: chains_irregular_baseline
+description: Irregular chains timetable, kerosene-only fleet, fixed departure times
+data_dir: data/dummy_chains_irregular
+objective: cost
+fleet: {KER-NB: 100}   # kerosene only, no cap
+carbon_price: 0
+wtt_co2_kg_per_kg: {kerosene: 0, lh2: 0, ch4: 0}   # well-to-tank CO2 (kg per kg fuel), 0 until sourced

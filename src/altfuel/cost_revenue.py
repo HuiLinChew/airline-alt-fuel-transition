@@ -15,7 +15,8 @@ from .data_layer import Data
 from .scenario_config import DEFAULT_OWNERSHIP, Scenario
 
 
-def add_costs(perf: pd.DataFrame, data: Data, airport_fuel: pd.DataFrame, sc: Scenario) -> pd.DataFrame:
+def add_costs(perf: pd.DataFrame, data: Data, airport_fuel: pd.DataFrame,
+              sc: Scenario) -> pd.DataFrame:
     p = perf.copy()
     types = p.index.get_level_values("type")
     leg_ids = p.index.get_level_values("leg_id")
@@ -30,8 +31,8 @@ def add_costs(perf: pd.DataFrame, data: Data, airport_fuel: pd.DataFrame, sc: Sc
     p["carbon_cost_usd"] = p.co2_ttw_t * sc.carbon_price * share
 
     aircraft = data.aircraft_types.reindex(types)
-    hourly = (aircraft.crew_cost_per_block_hour + aircraft.maintenance_cost_per_block_hour).to_numpy()
-    p["hourly_cost_usd"] = p.block_min / 60 * hourly
+    per_hour = aircraft.crew_cost_per_block_hour + aircraft.maintenance_cost_per_block_hour
+    p["hourly_cost_usd"] = p.block_min / 60 * per_hour.to_numpy()
     p["spill_cost_usd"] = p.spill_pax * fare_per_pax(data, sc).loc[leg_ids].to_numpy()
 
     p["operating_cost_usd"] = p.fuel_cost_usd + p.carbon_cost_usd + p.hourly_cost_usd
@@ -54,8 +55,9 @@ def fare_per_pax(data: Data, sc: Scenario) -> pd.Series:
 
 
 def drop_cost(data: Data, sc: Scenario) -> pd.Series:
-    """Revenue lost by not flying each leg."""
-    return data.legs.pax * fare_per_pax(data, sc)
+    """Revenue lost by not flying each leg (one value per leg, not per delayed copy)."""
+    undelayed = data.legs.delay_min == 0
+    return (data.legs.pax * fare_per_pax(data, sc))[undelayed]
 
 
 def ownership_per_day(data: Data, sc: Scenario) -> pd.Series:

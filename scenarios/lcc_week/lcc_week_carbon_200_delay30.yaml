@@ -1,0 +1,14 @@
+# As lcc_week_carbon_200, but each leg may leave up to 30 min late.
+name: lcc_week_carbon_200_delay30
+description: Low-cost timetable over a week (fewer flights at the weekend), 200 USD/t carbon price, nights at a base, departures may be delayed by up to 30 min
+data_dir: data/dummy_lcc_week
+objective: cost
+wtt_co2_kg_per_kg: {kerosene: 0, lh2: 0, ch4: 0}   # well-to-tank CO2 (kg per kg fuel), 0 until sourced
+fleet: {KER-NB: 100, LH2-NB: 100, CH4-NB: 100}   # no caps: as many aircraft of each type as the model wants
+fuel_max_tier: {lh2: 1, ch4: 2}  # as alt_carbon_200: no LH2 at DUB (tier 2)
+carbon_price: 200
+overnight_at_bases: true
+max_delay_min: 30
+delay_step_min: 5
+sweep: {parameter: max_delay_min, values: [0, 10, 20, 30]}
+period_min: 10080              # one week: the timetable repeats every 7 days

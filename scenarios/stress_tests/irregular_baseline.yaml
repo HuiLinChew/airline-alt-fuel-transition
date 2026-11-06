@@ -1,0 +1,6 @@
+# Kerosene only, on the irregular timetable (random departure times).
+name: irregular_baseline
+description: Irregular timetable, kerosene only, fixed departure times
+data_dir: data/dummy_irregular
+objective: cost
+fleet: {KER-NB: 100}   # kerosene only, no cap

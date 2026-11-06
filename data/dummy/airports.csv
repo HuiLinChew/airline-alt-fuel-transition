@@ -1,6 +1,6 @@
-station,name,lat,lon,tier,runways,stands,hourly_capacity
-LHR,London Heathrow Airport,51.4714,-0.4528,1,2,166,92.0
-CDG,Charles de Gaulle International Airport,49.0097,2.5486,1,4,256,120.0
-AMS,Amsterdam Airport Schiphol,52.3083,4.7681,1,6,165,100.0
-MAD,Adolfo Suarez Madrid-Barajas Airport,40.4736,-3.5611,1,4,178,75.0
-DUB,Dublin Airport,53.4325,-6.2522,2,3,100,40.0
+station,name,lat,lon,tier,runways,stands,hourly_capacity,base,curfew_start,curfew_end
+LHR,London Heathrow Airport,51.4714,-0.4528,1,2,166,92.0,0,,
+CDG,Charles de Gaulle International Airport,49.0097,2.5486,1,4,256,120.0,0,,
+AMS,Amsterdam Airport Schiphol,52.3083,4.7681,1,6,165,100.0,0,,
+MAD,Adolfo Suarez Madrid-Barajas Airport,40.4736,-3.5611,1,4,178,75.0,0,,
+DUB,Dublin Airport,53.4325,-6.2522,2,3,100,40.0,0,,

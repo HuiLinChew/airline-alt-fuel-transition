@@ -1,0 +1,9 @@
+# As alt_carbon_200, but the airline may drop legs that cost more than they earn.
+name: alt_carbon_200_drop
+description: As alt_carbon_200, but unprofitable legs may be dropped (placeholder fares)
+objective: cost
+fleet: {KER-NB: 100, LH2-NB: 100, CH4-NB: 100}   # no caps: as many aircraft of each type as the model wants
+fuel_max_tier: {lh2: 1, ch4: 2}
+carbon_price: 200
+allow_drop: true
+wtt_co2_kg_per_kg: {kerosene: 0, lh2: 0, ch4: 0}   # well-to-tank CO2 (kg per kg fuel), 0 until sourced

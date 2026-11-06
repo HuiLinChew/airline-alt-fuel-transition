@@ -5,9 +5,9 @@ import pandas as pd
 import pytest
 
 from altfuel import aircraft_performance, airport_capability, analysis, cost_revenue
-from altfuel.aircraft_performance import fuel_kg
+from altfuel.aircraft_performance import fuel_kg, in_curfew
 from altfuel.cost_revenue import ownership_per_day
-from altfuel.data_layer import load_data
+from altfuel.data_layer import delay_copies, load_data
 from altfuel.data_layer import validate as validate_data
 from altfuel.rotation_checker import build_rotations, day_cycles
 from altfuel.scenario_config import DEFAULT_OWNERSHIP, Scenario, load_scenario, validate
@@ -173,7 +173,8 @@ def test_overrides_change_the_inputs(data):
 # Fuel burn, block times, CO2
 
 def test_fuel_burn_table_replaces_straight_line(data):
-    table = pd.DataFrame({"type": ["LH2-NB", "LH2-NB"], "distance_km": [0, 1000], "fuel_kg": [500, 1500]})
+    table = pd.DataFrame({"type": ["LH2-NB", "LH2-NB"], "distance_km": [0, 1000],
+                          "fuel_kg": [500, 1500]})
     with_table = replace(data, fuel_burn=table)
     assert fuel_kg(with_table, "LH2-NB", 500) == pytest.approx(1000)
     assert pd.isna(fuel_kg(with_table, "LH2-NB", 2000))           # past the end of the table
@@ -197,7 +198,8 @@ def test_reference_type_keeps_the_schedule(data):
 
 
 def test_well_to_tank_counts_in_co2_but_not_carbon_price(data):
-    r = analysis.run(replace(load_scenario("alt_carbon_200"), wtt_co2_kg_per_kg={"lh2": 10.0}), data)
+    sc = replace(load_scenario("alt_carbon_200"), wtt_co2_kg_per_kg={"lh2": 10.0})
+    r = analysis.run(sc, data)
     lh2 = r.perf.xs("LH2-NB", level="type")
     assert (lh2.co2_wtt_t == lh2.fuel_kg * 10.0 / 1000).all()
     assert (r.perf.co2_t == r.perf.co2_ttw_t + r.perf.co2_wtt_t).all()
@@ -223,7 +225,8 @@ def test_switch_to_e_methane(data):
 # Spill and dropped legs
 
 def test_without_spill_a_small_aircraft_cannot_take_a_full_leg(data):
-    r = analysis.run(replace(load_scenario("alt_carbon_200"), aircraft_overrides={"LH2-NB": {"seats": 150}}), data)
+    sc = replace(load_scenario("alt_carbon_200"), aircraft_overrides={"LH2-NB": {"seats": 150}})
+    r = analysis.run(sc, data)
     seats_usable = int(150 * data.aircraft_types.max_load_factor["LH2-NB"])
     lh2_legs = r.flown[r.flown.type == "LH2-NB"].leg_id
     assert (data.legs.pax.loc[lh2_legs] <= seats_usable).all()
@@ -277,7 +280,8 @@ def test_stand_limit_is_respected(data):
     r = analysis.run(sc, data)
     assert r.result.status == "Optimal"
     assert r.kpis["capacity_breaches"] == 0
-    assert r.kpis["total_cost_usd"] >= analysis.run(load_scenario("alt_carbon_200"), data).kpis["total_cost_usd"]
+    no_limit = analysis.run(load_scenario("alt_carbon_200"), data)
+    assert r.kpis["total_cost_usd"] >= no_limit.kpis["total_cost_usd"]
 
 
 def test_overloaded_runway_has_no_solution(data):
@@ -297,23 +301,27 @@ def test_ownership_matches_hoelzen_annuity(data):
     own = ownership_per_day(data, Scenario(name="test"))
     rate, years, residual = 0.05, 14, 0.05
     annuity = rate * (1 - residual / (1 + rate) ** years) / (1 - 1 / (1 + rate) ** years)
-    assert own["KER-NB"] == pytest.approx(data.aircraft_types.price_usd["KER-NB"] * (annuity + 0.005) / 365)
+    price = data.aircraft_types.price_usd["KER-NB"]
+    assert own["KER-NB"] == pytest.approx(price * (annuity + 0.005) / 365)
     assert own["LH2-NB"] > own["KER-NB"]
 
 
 def test_changing_one_ownership_setting_keeps_the_others(data):
     own = ownership_per_day(data, Scenario(name="test", ownership={"interest_rate": 0.07}))
-    rate, years, residual = 0.07, DEFAULT_OWNERSHIP["depreciation_years"], DEFAULT_OWNERSHIP["residual_value"]
+    o = DEFAULT_OWNERSHIP
+    rate, years, residual = 0.07, o["depreciation_years"], o["residual_value"]
     annuity = rate * (1 - residual / (1 + rate) ** years) / (1 - 1 / (1 + rate) ** years)
     price = data.aircraft_types.price_usd["KER-NB"]
-    assert own["KER-NB"] == pytest.approx(price * (annuity + DEFAULT_OWNERSHIP["insurance_rate"]) / 365)
+    assert own["KER-NB"] == pytest.approx(price * (annuity + o["insurance_rate"]) / 365)
 
 
 def test_ownership_is_charged_per_aircraft_used(data):
     r = analysis.run(load_scenario("alt_carbon_200"), data)
     own = ownership_per_day(data, r.scenario)
-    assert r.kpis["ownership_cost_usd"] == pytest.approx(sum(n * own[k] for k, n in r.result.fleet_used.items()))
-    free = replace(r.scenario, aircraft_overrides={k: {"price_usd": 0} for k in data.aircraft_types.index})
+    expected = sum(n * own[k] for k, n in r.result.fleet_used.items())
+    assert r.kpis["ownership_cost_usd"] == pytest.approx(expected)
+    no_price = {k: {"price_usd": 0} for k in data.aircraft_types.index}
+    free = replace(r.scenario, aircraft_overrides=no_price)
     assert analysis.run(free, data).kpis["aircraft"] >= r.kpis["aircraft"]
 
 
@@ -336,6 +344,107 @@ def test_chains_timetable_gives_multi_day_cycles():
     assert r.violations == []
     assert r.kpis["longest_cycle_days"] > 1
     # every aircraft-day belongs to exactly one cycle
-    for ac_type, n in r.result.fleet_used.items():
-        if n:
-            assert r.cycles[r.cycles.type == ac_type].days.sum() == r.rotations[r.rotations.type == ac_type].tail_id.nunique()
+    aircraft_days = r.rotations.groupby("type").tail_id.nunique()
+    assert (r.cycles.groupby("type").days.sum() == aircraft_days).all()
+
+
+# Departure times (delays)
+
+def test_delays_only_push_legs_later_and_never_cost_more():
+    sc = load_scenario("chains_carbon_200")
+    fixed = analysis.run(sc)
+    delayed = analysis.run(replace(sc, max_delay_min=60))
+    assert delayed.violations == []
+    # each timetabled leg flown exactly once, at its time or up to 60 min later
+    legs = delayed.data.legs.loc[delayed.flown.leg_id]
+    assert sorted(legs.leg) == sorted(fixed.data.legs.index)
+    assert legs.delay_min.between(0, 60).all()
+    # more choice can only help
+    assert delayed.result.objective <= fixed.result.objective + 1e-6
+    assert delayed.kpis["pax_demand"] == fixed.kpis["pax_demand"]
+
+
+def test_zero_delay_leaves_the_legs_unchanged(data):
+    legs = delay_copies(data.legs, 0, 10, 1440)
+    assert legs.index.equals(data.legs.index)
+    assert (legs.dep_min == data.legs.dep_min).all()
+
+
+@pytest.mark.parametrize("name", ["irregular_baseline", "chains_irregular_baseline"])
+def test_delays_save_aircraft_on_an_irregular_timetable(name):
+    sc = load_scenario(name)
+    fixed = analysis.run(sc)
+    delayed = analysis.run(replace(sc, max_delay_min=60))
+    assert delayed.violations == []
+    assert delayed.kpis["aircraft"] < fixed.kpis["aircraft"]
+
+
+def test_delays_work_across_midnight():
+    """The irregular timetable 3 h later (some legs now land, or are delayed, past
+    midnight) must need the same aircraft and cost the same."""
+    sc = replace(load_scenario("irregular_carbon_200"), max_delay_min=60)
+    data = load_data(sc.data_path)
+    legs = data.legs.copy()
+    block = legs.arr_min - legs.dep_min
+    legs["dep_min"] = (legs.dep_min + 180) % 1440
+    legs["arr_min"] = legs.dep_min + block
+    normal = analysis.run(sc, data)
+    shifted = analysis.run(sc, replace(data, legs=legs))
+    assert (legs.arr_min >= 1440).any()
+    assert shifted.violations == []
+    assert shifted.kpis["aircraft"] == normal.kpis["aircraft"]
+    assert shifted.kpis["total_cost_usd"] == pytest.approx(normal.kpis["total_cost_usd"])
+
+
+# Bases and curfews
+
+def test_aircraft_spend_the_night_at_a_base():
+    r = analysis.run(load_scenario("lcc_baseline"))
+    assert r.violations == []
+    last_stop = r.rotations.groupby("tail_id").destination.last()
+    assert last_stop.isin(["DUB", "MAD"]).all()
+
+
+def test_base_rule_binds_when_the_timetable_ends_away_from_base():
+    """The irregular timetable has flights at night from airports that aren't bases."""
+    sc = load_scenario("irregular_baseline")
+    data = load_data(sc.data_path)
+    airports = data.airports.assign(base=data.airports.index.isin(["DUB", "MAD"]).astype(int))
+    r = analysis.run(replace(sc, overnight_at_bases=True), replace(data, airports=airports))
+    assert r.kpis["status"] not in analysis.SOLVED
+
+
+def test_curfew_blocks_flights_at_night():
+    start, end = 1410, 360                      # 23:30-06:00
+    assert in_curfew(pd.Series([1420, 1440 + 300, 100]), start, end).all()
+    assert not in_curfew(pd.Series([360, 720, 1400]), start, end).any()
+    assert not in_curfew(pd.Series([100]), float("nan"), float("nan")).any()
+
+
+def test_a_longer_turn_shuts_lh2_out_until_legs_can_be_delayed():
+    """The low-cost timetable is built for kerosene turns; LH2 refuels for longer."""
+    sc = load_scenario("lcc_carbon_200")
+    fixed = analysis.run(sc)
+    delayed = analysis.run(replace(sc, max_delay_min=30, delay_step_min=5))
+    assert fixed.kpis["share_lh2"] < delayed.kpis["share_lh2"]
+
+
+def test_a_week_needs_the_busiest_day_and_nights_at_bases_every_night():
+    """The week timetable is the day timetable with fewer lines at the weekend."""
+    day = analysis.run(load_scenario("lcc_carbon_200"))
+    week = analysis.run(load_scenario("lcc_week_carbon_200"))
+    assert week.violations == []
+    assert week.kpis["aircraft"] == day.kpis["aircraft"]
+    rot = week.rotations.assign(night=week.rotations.arr_min // 1440)
+    assert rot.groupby(["tail_id", "night"]).destination.last().isin(["DUB", "MAD"]).all()
+
+
+def test_no_delays_that_gain_nothing():
+    """Delays that don't improve the objective are removed by the second solve,
+    without adding aircraft."""
+    sc = replace(load_scenario("chains_min_co2"), max_delay_min=60, delay_step_min=5)
+    fixed = analysis.run(replace(sc, max_delay_min=0))
+    delayed = analysis.run(sc)
+    assert delayed.result.objective == pytest.approx(fixed.result.objective)
+    assert delayed.kpis["legs_delayed"] == 0
+    assert delayed.kpis["aircraft"] == fixed.kpis["aircraft"]

@@ -38,7 +38,7 @@ Module numbers follow the planning sheet (FYP_Papers.xlsx, "Code modules").
 | Methane aircraft energy | +10% vs kerosene | Rompokos et al. 2020 (LNG 737-800, typical 1000–2000 NM flights) |
 | Aircraft price, kerosene narrowbody | 49.4 M USD | IBA (2021): new-delivery A320neo market value |
 | LH₂ aircraft price | +12% vs kerosene | Hoelzen et al. 2022 (short-range aircraft CAPEX) |
-| Methane aircraft price | = kerosene | Not sourced yet, and it decides whether LNG wins (see methane section) |
+| Methane aircraft price | +9% vs kerosene (low case +7.1%) | Raab et al. 2024 Table 12, 180-seat narrowbody: LCH₄ +7.1%, LH₂ +9.5% vs SAF. Their ratio (75%) applied to our LH₂ +12% |
 | Fossil LNG price | 0.57 USD/kg | LNG Japan 10.5 USD/mmbtu, 2027 forecast (World Bank CMO, Oct 2025) + airport handling 6.5 € cents/kg (Raab et al. 2024) |
 | Ownership finance | 5% interest, 14 years, 5% residual value, 0.5% insurance | Hoelzen et al. 2022, App. A |
 | Fare (yield) | 0.148 USD per pax-km | Proesmans et al. 2023, Table 3 |
@@ -48,6 +48,7 @@ Module numbers follow the planning sheet (FYP_Papers.xlsx, "Code modules").
 | Maintenance cost | 2,060 USD/block hour, all types | Placeholder (keeps crew + maintenance at 3,000). Differences not applied yet: Hoelzen et al. 2022 give +11% for LH₂ (short-range), which moves LH₂'s entry from 200 to 250 USD/t; methane difference not sourced |
 | Base turn time | 40 min | Akinola et al. 2025 (short turnaround) |
 | LH2 refuel: plug in/out, flow | 5 + 4 min, 2 pumps × 5 kg/s | Al-Timimi (`parameters.py`) |
+| LNG refuel: plug in/out, flow | 9 min (low case 6), 2 pumps × 10.4 kg/s | Al-Timimi Eq. 9 with Mangold et al. 2022's cryogenic connect, chill-down and purge times (9 min with purging, 6 without), assumed to apply to LNG; flow = kerosene 20 kg/s × density 423/810 (Raab et al. 2024 Table 14), same hose and speed as kerosene. No LNG-specific data found |
 | Kerosene refuel: plug in/out, flow | 2 + 2 min, 2 pumps × 20 kg/s | Al-Timimi |
 | CO2 factors | Kerosene 3.16, CH4 2.75, LH2 0 kg/kg (tank-to-wake) | Al-Timimi (kerosene); stoichiometry (CH4) |
 | Kerosene price | 0.60 USD/kg | Hoelzen et al. 2025 |
@@ -74,18 +75,20 @@ Module numbers follow the planning sheet (FYP_Papers.xlsx, "Code modules").
 `ch4_e` is e-methane: synthetic price; its burnt CO₂ was taken from the air when it was made
 (well-to-tank −2.75 kg/kg, a placeholder that ignores production energy), and it is zero-rated
 for the carbon price (`carbon_price_share` 0). To switch, a scenario points the methane aircraft at
-the other fuel and offers it: see `scenarios/alt_carbon_200_emethane.yaml`.
+the other fuel and offers it: see `scenarios/out_and_back/alt_carbon_200_emethane.yaml`.
 
 | | Fossil LNG (`ch4`) | e-methane (`ch4_e`) | Kerosene | LH₂ |
 |---|---|---|---|---|
 | Price, USD/GJ | 11.4 | 29.2 | 13.9 | 20.8 |
 | CO₂ burnt, kg/GJ (pays carbon price) | 55 (yes) | 55 (no) | 73 (yes) | 0 |
 
-With these prices fossil LNG is cheaper per GJ than kerosene, so LNG aircraft
-win even with no carbon price, but only because no LNG-aircraft price premium has been sourced (0%).
-On the dummy network with no carbon price: premium 0% → 100% of legs LNG; +5% → 65%; +12% (the LH₂
-premium) → 0%. The LNG aircraft premium (and LNG turnaround/refuelling data) must be sourced before
-methane results are reported. Methane slip (unburnt CH₄, a strong greenhouse gas) is not modelled.
+With these prices fossil LNG is cheaper per GJ than kerosene, so the LNG aircraft premium decides
+how much LNG flies with no carbon price. On the dummy network (unlimited fleets, no carbon price):
+premium 0% → 100% of legs LNG; +5% → 65%; +7.1% → 35%; +9% (used) → 15%; +12% → 0%.
+LNG refuels about 6 min slower than kerosene, like LH₂ (connection time dominates; the LNG pumping
+itself is fast). On tight timetables this keeps LNG out unless legs can be delayed; the 6-min
+connection low case lets it back in (low-cost timetable at 200 USD/t, fixed times: 0% → 21% LNG).
+Methane slip (unburnt CH₄, a strong greenhouse gas) is not modelled, so LNG's CO₂ saving is overstated.
 
 ## Planned: tankering and boil-off
 

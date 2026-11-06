@@ -1,0 +1,11 @@
+# As chains_carbon_200, but each leg may leave up to 60 min after its timetabled time.
+name: chains_carbon_200_delay60
+description: Chains timetable, 200 USD/t carbon price, departures may be delayed by up to 60 min
+data_dir: data/dummy_chains
+objective: cost
+fleet: {KER-NB: 100, LH2-NB: 100, CH4-NB: 100}   # no caps: as many aircraft of each type as the model wants
+fuel_max_tier: {lh2: 1, ch4: 2}
+carbon_price: 200
+max_delay_min: 60
+delay_step_min: 10
+wtt_co2_kg_per_kg: {kerosene: 0, lh2: 0, ch4: 0}   # well-to-tank CO2 (kg per kg fuel), 0 until sourced

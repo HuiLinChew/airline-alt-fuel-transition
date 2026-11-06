@@ -55,8 +55,8 @@ def build_rotations(data: Data, perf: pd.DataFrame, assign: pd.DataFrame, fleet_
     return pd.DataFrame(rows, columns=columns), problems
 
 
-def day_cycles(rotations: pd.DataFrame) -> pd.DataFrame:
-    """Join one day's rotations into multi-day cycles.
+def day_cycles(rotations: pd.DataFrame, period_min: int = 1440) -> pd.DataFrame:
+    """Join one period's rotations (a day, or a week) into multi-period cycles.
 
     An aircraft that ends the day at X flies, the next day, the rotation of an
     aircraft that started the day at X. Following that chain until it comes back
@@ -67,9 +67,9 @@ def day_cycles(rotations: pd.DataFrame) -> pd.DataFrame:
     """
     rows = []
     for ac_type, rot in rotations.groupby("type"):
-        days = rot.groupby("tail_id", sort=False)
-        start = days.origin.first()
-        end = days.destination.last()
+        by_tail = rot.groupby("tail_id", sort=False)
+        start = by_tail.origin.first()
+        end = by_tail.destination.last()
         if sorted(start) != sorted(end):
             continue                     # already flagged by build_rotations
 
@@ -94,6 +94,7 @@ def day_cycles(rotations: pd.DataFrame) -> pd.DataFrame:
                 seen.add(tail)
                 nights.append(end[tail])
                 tail = next_day[tail]
-            rows.append({"type": ac_type, "first_rotation": first, "days": len(nights),
+            days = len(nights) * period_min // 1440
+            rows.append({"type": ac_type, "first_rotation": first, "days": days,
                          "home": start[first], "nights": " > ".join(nights)})
     return pd.DataFrame(rows, columns=["type", "first_rotation", "days", "home", "nights"])

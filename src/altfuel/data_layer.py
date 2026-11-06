@@ -9,6 +9,7 @@ import pandas as pd
 
 from .utils import read_csv
 
+
 @dataclass
 class Data:
     airports: pd.DataFrame        # one row per station
@@ -49,6 +50,28 @@ def apply_overrides(data: Data, aircraft_overrides: dict, fuel_overrides: dict) 
     return replace(data, aircraft_types=aircraft, fuels=fuels)
 
 
+def delay_copies(legs: pd.DataFrame, max_delay_min: int, step_min: int,
+                 period_min: int) -> pd.DataFrame:
+    """One copy of each leg for every allowed delay: 0, step, 2 x step ... up to max_delay_min.
+    The optimiser flies one copy of each leg. Column `leg` is the original leg_id; the
+    undelayed copy keeps that id, so with max_delay_min = 0 the legs are unchanged.
+    A copy pushed past the end of the period leaves early in the next one instead (the
+    timetable repeats, so 23:50 + 30 min is 00:20)."""
+    copies = []
+    for delay in range(0, max_delay_min + 1, step_min):
+        c = legs.copy()
+        c["leg"] = legs.index
+        c["delay_min"] = delay
+        c["dep_min"] += delay
+        c["arr_min"] += delay
+        if delay:
+            c.index = c.index + f"+{delay}"
+        late = c.dep_min >= period_min
+        c.loc[late, ["dep_min", "arr_min"]] -= period_min
+        copies.append(c)
+    return pd.concat(copies).rename_axis("leg_id")
+
+
 def validate(data: Data) -> None:
     """Catch input mistakes that would otherwise give a wrong answer without any error."""
     legs, aircraft = data.legs, data.aircraft_types
@@ -61,8 +84,9 @@ def validate(data: Data) -> None:
     if unknown:
         problems.append(f"legs use stations missing from airports.csv: {sorted(unknown)}")
 
-    if not (pd.api.types.is_integer_dtype(legs.dep_min) and pd.api.types.is_integer_dtype(legs.arr_min)):
-        problems.append("dep_min and arr_min must be whole minutes")
+    for col in ["dep_min", "arr_min"]:
+        if not pd.api.types.is_integer_dtype(legs[col]):
+            problems.append(f"{col} must be whole minutes")
 
     unknown_fuels = set(aircraft.fuel) - set(data.fuels.index)
     if unknown_fuels:

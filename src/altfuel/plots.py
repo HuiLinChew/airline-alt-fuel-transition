@@ -19,12 +19,14 @@ BLACK, GREY, LIGHT_GREY, BACKGROUND = "#0b0b0b", "#52514e", "#e4e3df", "#fcfcfb"
 LAND, BORDER = "#efeee9", "#d3d1cb"
 LAND_FILE = ROOT / "data" / "europe_outline.geojson"   # coastlines and borders (GSHHG)
 LABEL_DIRECTION = {"LHR": (-1, -0.7), "DUB": (-0.35, 1)}   # hand-placed for the dummy network
-UNITS = {"carbon_price": "USD per t CO₂", "yield_usd_per_pax_km": "USD per pax-km"}
+UNITS = {"carbon_price": "USD per t CO₂", "yield_usd_per_pax_km": "USD per pax-km",
+         "max_delay_min": "min"}
 
 plt.rcParams.update({
     "figure.facecolor": BACKGROUND, "axes.facecolor": BACKGROUND, "savefig.facecolor": BACKGROUND,
     "text.color": BLACK, "axes.labelcolor": GREY, "xtick.color": GREY, "ytick.color": GREY,
-    "axes.edgecolor": LIGHT_GREY, "font.size": 10, "axes.spines.top": False, "axes.spines.right": False,
+    "axes.edgecolor": LIGHT_GREY, "font.size": 10,
+    "axes.spines.top": False, "axes.spines.right": False,
 })
 
 
@@ -61,13 +63,15 @@ def network_map(run, background=True):
     flown = run.flown.merge(run.rotations[["leg_id", "origin", "destination"]], on="leg_id")
     flown["pair"] = [tuple(sorted(p)) for p in zip(flown.origin, flown.destination)]
 
+    days = run.scenario.period_min // 1440
     fig, ax = plt.subplots(figsize=(8.5, 6))
     lines = []
     for (pair, fuel), n in flown.groupby(["pair", "fuel"]).size().items():
         start = airports.loc[pair[0], ["lon", "lat"]].to_numpy()
         end = airports.loc[pair[1], ["lon", "lat"]].to_numpy()
         bend = 0.08 + 0.12 * fuels.index(fuel)     # so two fuels on one route don't overlap
-        ax.add_patch(FancyArrowPatch(start, end, arrowstyle="-", color=colour[fuel], lw=0.6 + 0.45 * n,
+        width = 0.6 + 0.45 * n / days              # by legs per day, so a week looks like a day
+        ax.add_patch(FancyArrowPatch(start, end, arrowstyle="-", color=colour[fuel], lw=width,
                                      connectionstyle=f"arc3,rad={bend}"))
         lines.append((start, end, bend, fuel, n))
     ax.scatter(airports.lon, airports.lat, s=90, c=BACKGROUND, edgecolors=BLACK, lw=1.5, zorder=3)
@@ -80,12 +84,14 @@ def network_map(run, background=True):
     for station, airport in airports.iterrows():
         offered = [label[f] for f in fuels
                    if f not in everywhere and run.airport_fuel.loc[(station, f), "available"]]
-        away = np.array(LABEL_DIRECTION.get(station, [airport.lon, airport.lat] - middle), dtype=float)
+        point = (airport.lon, airport.lat)
+        away = np.array(LABEL_DIRECTION.get(station, point - middle), dtype=float)
         away = away / np.hypot(*away)
         ha = "center" if abs(away[0]) < 0.4 else ("left" if away[0] > 0 else "right")
-        ax.annotate(f"{station} (tier {airport.tier})\n{' · '.join(offered)}", (airport.lon, airport.lat),
-                    xytext=14 * away, textcoords="offset points", fontsize=8.5, zorder=6,
-                    ha=ha, va="bottom" if away[1] >= 0 else "top", linespacing=1.1)
+        va = "bottom" if away[1] >= 0 else "top"
+        text = f"{station} (tier {airport.tier})\n{' · '.join(offered)}"
+        ax.annotate(text, point, xytext=14 * away, textcoords="offset points", fontsize=8.5,
+                    zorder=6, ha=ha, va=va, linespacing=1.1)
 
     # Frame the airports with some space around them, then put the map underneath
     lon, lat = airports.lon, airports.lat
@@ -106,14 +112,18 @@ def network_map(run, background=True):
         ax.set_ylabel("Latitude (°)")
         add_grid(ax)
 
-    handles = [Line2D([], [], color=colour[f], lw=3, label=label[f]) for f in fuels if f in set(flown.fuel)]
-    handles += [Line2D([], [], color=GREY, lw=0.6 + 0.45 * n, label=f"{n} legs") for n in (2, 6)]
-    ax.legend(handles=handles, loc="lower left", bbox_to_anchor=(1.04, 0), frameon=False, fontsize=8.5)
+    used = set(flown.fuel)
+    handles = [Line2D([], [], color=colour[f], lw=3, label=label[f]) for f in fuels if f in used]
+    handles += [Line2D([], [], color=GREY, lw=0.6 + 0.45 * n, label=f"{n} legs a day") for n in (2, 6)]
+    ax.legend(handles=handles, loc="lower left", bbox_to_anchor=(1.04, 0), frameon=False,
+              fontsize=8.5)
 
-    ax.set_title(f"{run.scenario.name}: {run.kpis['legs_flown']} legs, {run.kpis['aircraft']} aircraft",
+    k = run.kpis
+    ax.set_title(f"{run.scenario.name}: {k['legs_flown']} legs, {k['aircraft']} aircraft",
                  loc="left", fontsize=11, pad=30)
     note = f" (offered everywhere: {', '.join(label[f] for f in everywhere)})" if everywhere else ""
-    ax.text(0, 1.015, f"Numbers: legs per day on each line, both directions\n"
+    period = {1: "day", 7: "week"}.get(days, f"{days} days")
+    ax.text(0, 1.015, f"Numbers: legs per {period} on each line, both directions\n"
                       f"Labels: airport tier and fuels offered{note}",
             transform=ax.transAxes, fontsize=8, color=GREY, va="bottom")
     fig.tight_layout()
@@ -143,29 +153,40 @@ def tail_gantt(run):
     rot = run.rotations
     tails = list(dict.fromkeys(rot.tail_id))
 
-    fig, ax = plt.subplots(figsize=(10, 0.45 * len(tails) + 1.2))
+    week = run.scenario.period_min > 1440
+    fig, ax = plt.subplots(figsize=(16 if week else 10, 0.45 * len(tails) + 1.2))
     for r in rot.itertuples():
         row = tails.index(r.tail_id)
         start, hours = r.dep_min / 60, (r.arr_min - r.dep_min) / 60
         ax.barh(row, hours, left=start, height=0.62, color=colour[fuel_of[r.type]],
-                edgecolor=BACKGROUND, lw=2)
-        if hours > 0.8:
-            ax.text(start + hours / 2, row, f"{r.origin}–{r.destination}", ha="center", va="center",
-                    fontsize=6, color="white")
+                edgecolor=BACKGROUND, lw=0.5 if week else 2)
+        if hours > 0.8 and not week:
+            ax.text(start + hours / 2, row, f"{r.origin}–{r.destination}",
+                    ha="center", va="center", fontsize=6, color="white")
 
     ax.set_yticks(range(len(tails)), tails, fontsize=8)
     ax.invert_yaxis()
-    first_hour = min(6, rot.dep_min.min() // 60)
-    last_hour = max(24, int(np.ceil(rot.arr_min.max() / 60)))
-    ax.set_xlim(first_hour, last_hour)
-    ticks = range(first_hour, last_hour + 1, 2)
-    ax.set_xticks(ticks, [f"{h % 24:02d}:00" for h in ticks])
+    if week:      # one tick per day; airport codes left out, bars are too short
+        days = run.scenario.period_min // 1440
+        ax.set_xlim(0, 24 * days)
+        weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][:days]
+        ax.set_xticks([24 * d + 12 for d in range(days)], weekdays)
+        ax.set_xticks([24 * d for d in range(days + 1)], minor=True)
+        ax.grid(axis="x", which="minor", color=LIGHT_GREY, lw=1)
+        ax.tick_params(axis="x", which="major", length=0)
+    else:
+        first_hour = min(6, rot.dep_min.min() // 60)
+        last_hour = max(24, int(np.ceil(rot.arr_min.max() / 60)))
+        ax.set_xlim(first_hour, last_hour)
+        ticks = range(first_hour, last_hour + 1, 2)
+        ax.set_xticks(ticks, [f"{h % 24:02d}:00" for h in ticks])
     add_grid(ax, "x")
     ax.spines["left"].set_visible(False)
 
     used = {fuel_of[t] for t in rot.type}
     patches = [Patch(color=colour[f], label=run.data.fuels.label[f]) for f in colour if f in used]
-    ax.legend(handles=patches, loc="upper left", bbox_to_anchor=(1.0, 1.0), frameon=False, fontsize=8.5)
+    ax.legend(handles=patches, loc="upper left", bbox_to_anchor=(1.0, 1.0), frameon=False,
+              fontsize=8.5)
     ax.set_title(f"{run.scenario.name}: tail rotations", loc="left", fontsize=11)
     fig.tight_layout()
     return fig
@@ -186,10 +207,12 @@ def scenario_comparison(runs):
         owning = sum(r.result.fleet_used.get(t, 0) * r.ownership.get(t, 0) for t in types)
         return (r.flown.loc[r.flown.fuel == fuel, "operating_cost_usd"].sum() + owning) / 1000
 
-    lost_k = np.array([(r.kpis["spill_cost_usd"] + r.kpis["dropped_revenue_usd"]) / 1000 for r in runs])
+    lost = [r.kpis["spill_cost_usd"] + r.kpis["dropped_revenue_usd"] for r in runs]
+    lost_k = np.array(lost) / 1000
 
     fig, axes = plt.subplots(1, 2, figsize=(11, 0.55 * len(names) + 1.8), sharey=True)
-    for ax, value, xlabel in [(axes[0], co2, "CO₂, well-to-wake (t)"), (axes[1], cost_k, "Total cost ($k)")]:
+    panels = [(axes[0], co2, "CO₂, well-to-wake (t)"), (axes[1], cost_k, "Total cost ($k)")]
+    for ax, value, xlabel in panels:
         left = np.zeros(len(runs))
         for fuel in colour:
             widths = np.array([value(r, fuel) for r in runs])
@@ -211,7 +234,8 @@ def scenario_comparison(runs):
 
     axes[0].set_yticks(range(len(runs)), names)
     axes[0].invert_yaxis()
-    fig.suptitle("Scenario comparison (change vs baseline in brackets)", x=0.01, ha="left", fontsize=11)
+    fig.suptitle("Scenario comparison (change vs baseline in brackets)",
+                 x=0.01, ha="left", fontsize=11)
     handles, labels = axes[1].get_legend_handles_labels()
     fig.legend(handles, labels, loc="upper right", ncol=len(handles), frameon=False, fontsize=8.5)
     fig.tight_layout(rect=(0, 0, 1, 0.93))

@@ -1,0 +1,8 @@
+# As irregular_baseline, but each leg may leave up to 60 min late: the pure scheduling effect.
+name: irregular_baseline_delay60
+description: Irregular timetable, kerosene only, departures may be delayed by up to 60 min
+data_dir: data/dummy_irregular
+objective: cost
+fleet: {KER-NB: 100}   # kerosene only, no cap
+max_delay_min: 60
+sweep: {parameter: max_delay_min, values: [0, 10, 20, 30, 40, 50, 60, 90, 120]}

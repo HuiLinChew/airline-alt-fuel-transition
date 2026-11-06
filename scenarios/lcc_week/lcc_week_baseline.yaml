@@ -1,0 +1,9 @@
+# Week version of lcc_baseline. Low-cost-carrier style network (bases DUB and MAD), kerosene only.
+name: lcc_week_baseline
+description: Low-cost timetable over a week (fewer flights at the weekend), kerosene only, aircraft spend the night at a base
+data_dir: data/dummy_lcc_week
+objective: cost
+wtt_co2_kg_per_kg: {kerosene: 0, lh2: 0, ch4: 0}   # well-to-tank CO2 (kg per kg fuel), 0 until sourced
+fleet: {KER-NB: 100}   # kerosene only, no cap
+overnight_at_bases: true
+period_min: 10080              # one week: the timetable repeats every 7 days

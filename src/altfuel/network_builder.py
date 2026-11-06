@@ -24,6 +24,7 @@ class Network:
     period_min: int
     nodes: dict = field(default_factory=dict)   # (type, station) -> sorted node times
     flights: pd.DataFrame = None                # one row per flight arc
+    bases: list = field(default_factory=list)   # stations where aircraft are based
 
 
 def build_network(data: Data, perf: pd.DataFrame, period_min: int) -> Network:
@@ -31,6 +32,8 @@ def build_network(data: Data, perf: pd.DataFrame, period_min: int) -> Network:
     legs = data.legs.loc[f.leg_id]
     f["origin"] = legs.origin.to_numpy()
     f["destination"] = legs.destination.to_numpy()
+    f["leg"] = legs.leg.to_numpy()                 # original leg, if this is a delayed copy
+    f["delay_min"] = legs.delay_min.to_numpy()
 
     dep = legs.dep_min.to_numpy()
     ready = f.arr_min.to_numpy() + f.turn_min.to_numpy()
@@ -41,10 +44,10 @@ def build_network(data: Data, perf: pd.DataFrame, period_min: int) -> Network:
     f["ready_t"] = ready % period_min
     f["crosses"] = ready >= period_min
 
-    net = Network(period_min)
+    net = Network(period_min, bases=list(data.airports.index[data.airports.base == 1]))
     for ac_type, flights in f.groupby("type"):
-        departures = flights[["origin", "dep_t"]].rename(columns={"origin": "station", "dep_t": "t"})
-        readies = flights[["destination", "ready_t"]].rename(columns={"destination": "station", "ready_t": "t"})
+        departures = pd.DataFrame({"station": flights.origin, "t": flights.dep_t})
+        readies = pd.DataFrame({"station": flights.destination, "t": flights.ready_t})
         for station, events in pd.concat([departures, readies]).groupby("station"):
             net.nodes[ac_type, station] = sorted(events.t.unique())
 
@@ -52,6 +55,6 @@ def build_network(data: Data, perf: pd.DataFrame, period_min: int) -> Network:
     position = {key: {t: i for i, t in enumerate(times)} for key, times in net.nodes.items()}
     f["dep_node"] = [position[k, s][t] for k, s, t in zip(f.type, f.origin, f.dep_t)]
     f["arr_node"] = [position[k, s][t] for k, s, t in zip(f.type, f.destination, f.ready_t)]
-    net.flights = f[["type", "leg_id", "origin", "destination", "dep_node", "arr_node",
-                     "crosses", "dep_t", "arr_t", "ready_t"]]
+    net.flights = f[["type", "leg_id", "leg", "delay_min", "origin", "destination",
+                     "dep_node", "arr_node", "crosses", "dep_t", "arr_t", "ready_t"]]
     return net

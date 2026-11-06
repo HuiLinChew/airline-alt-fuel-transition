@@ -5,9 +5,9 @@ What each file does, how they connect, and how the optimiser works.
 ## How it fits together
 
 ```
-scripts/make_dummy_data.py  ->  data/dummy/*.csv, data/dummy_chains/*.csv   (run once)
+scripts/make_dummy_data.py  ->  data/dummy*/   (four timetables, run once)
 
-scenarios/*.yaml  ->  scenario_config
+scenarios/<timetable>/*.yaml  ->  scenario_config
 data/dummy/*.csv  ->  data_layer
                         |
         airport_capability     which fuels each airport has, prices, capacity limits
@@ -20,19 +20,27 @@ data/dummy/*.csv  ->  data_layer
 ```
 
 `analysis.run(scenario)` runs the whole chain for one scenario.
-`scripts/run_scenarios.py` runs every scenario and saves everything in `outputs/`.
+`scripts/run_scenarios.py` runs every scenario (one folder per timetable, each folder's baseline first;
+`scenarios/stress_tests/` is left out) and saves each folder's results in `outputs/<folder>/`.
 
 ## Files
 
 ### Inputs (`data/dummy/`)
-Two dummy timetables share the same airports, aircraft and fuels:
-`data/dummy/` (out-and-back pairs) and `data/dummy_chains/` (chains such as
+Five dummy timetables share the same airports, aircraft and fuels:
+`data/dummy/` (out-and-back pairs), `data/dummy_chains/` (chains such as
 LHR→CDG→MAD→LHR, where aircraft end the day away from where they started; used by the
-`chains_*` scenarios). Each scenario is compared with the first scenario on the same data.
+`chains_*` scenarios) and `data/dummy_irregular/` (route demand split over more, smaller
+flights at random times, to test `max_delay_min`; used by the `irregular_*` scenarios).
+`data/dummy_chains_irregular/` is the chains timetable with random ground times between legs
+(`chains_irregular_*` scenarios). `data/dummy_lcc/` is a low-cost-carrier style timetable
+(`lcc_*` scenarios): aircraft based at DUB and MAD, each line starting and ending at a base,
+25-min turns away from base, curfews at LHR and AMS. `data/dummy_lcc_week/` repeats that
+day for a week (`period_min: 10080`, `lcc_week_*` scenarios), with 2 fewer lines on Saturday
+and 1 fewer on Sunday. Each scenario is compared with the first scenario on the same data.
 
 | File | Contents |
 |---|---|
-| `airports.csv` | Station, coordinates, tier, runways, stands, hourly runway capacity (Henry's database) |
+| `airports.csv` | Station, coordinates, tier, runways, stands, hourly runway capacity (Henry's database); `base` (1 = aircraft are based here); `curfew_start`, `curfew_end` (minutes from midnight, blank = no curfew; no departure or arrival in between) |
 | `legs.csv` | The timetable: `leg_id`, origin, destination, `dep_min`, `arr_min` (minutes from the start of the period), distance, passengers, and optionally `fare_usd` |
 | `aircraft_types.csv` | Per type: fuel, seats, max load factor, range, turn time, refuel pumps, crew and maintenance cost per block hour, cruise speed, price, fuel burn (`fuel_kg_fixed + fuel_kg_per_km × distance`) |
 | `fuel_burn.csv` | Optional. A fuel-vs-distance table for any type that shouldn't use the straight line (e.g. Maria's curves) |
@@ -87,6 +95,9 @@ A scenario YAML only lists what differs from these defaults.
 | `refuel_on_critical_path` | true | Extra refuelling time adds to the turn |
 | `capacity_mode` | `check` | `off`, `check` (report runway and stand use) or `constrain` (enforce the limits) |
 | `capacity_share` | 0.15 | Share of each airport's runway movements and stands this airline can use. One number, or `{movements_per_hour: a, stands: b}` |
+| `max_delay_min` | 0 | Each leg may leave up to this many minutes after its timetabled time (never earlier). 0 = fixed timetable |
+| `delay_step_min` | 10 | Step between allowed delays (0, 10, 20 … min) |
+| `overnight_at_bases` | false | Every aircraft spends the night at a base (any base in `airports.csv`) |
 | `period_min` | 1440 | 1440 for a day, 10080 for a week |
 | `solver` | 60 s, gap 0 | `time_limit_s`, `mip_gap`, `msg` |
 | `sweep` | | `{parameter: ..., values: [...]}` to re-run across values |
@@ -129,14 +140,25 @@ marked `crosses` and its ready node goes at (ready time − period).
    (always 0 unless drops are allowed); `g[k, s, i]` = type-k aircraft waiting at
    station s between node i and the next.
 2. If drops aren't allowed, it first checks every leg has at least one type that
-   can fly it, and if not, says which legs and why.
-3. Cover: for each leg, the x's plus y add up to 1.
+   can fly it, and if not, says which legs and why (out of range, no fuel, too few
+   seats, or in a night curfew; `aircraft_performance` marks copies that leave or land
+   inside a curfew as not feasible).
+3. Cover: for each leg, the x's plus y add up to 1. With `max_delay_min` > 0,
+   `data_layer.delay_copies` has made one copy of each leg per allowed delay
+   (`L007`, `L007+10`, `L007+20` …), and the x's of all its copies count, so the
+   model also picks when the leg leaves (Rexing et al. 2000). The undelayed copy keeps
+   the original id, so with no delay nothing changes.
 4. Balance: at each node, flights arriving + aircraft already waiting = flights
    departing + aircraft left waiting.
 5. Count: aircraft in use = those waiting overnight + those still flying or
-   turning at the end of the period. This must be ≤ the fleet.
+   turning at the end of the period. This must be ≤ the fleet. With
+   `overnight_at_bases`, at every midnight in the period (7 of them in a week) the
+   ground arcs over midnight at non-base airports are 0, and so are flights still
+   flying or turning then towards a non-base airport.
 6. Objective: sum of c × x + drop cost × y + ownership × aircraft used (cost runs
-   only) + a tiny cost per aircraft so it never keeps spare ones.
+   only) + a tiny cost per aircraft so it never keeps spare ones. If any legs were
+   delayed, a second solve keeps that best objective and the same aircraft and
+   minimises total delay minutes, so legs are only delayed when that saves something.
 7. Capacity (unless off): runway movements per station per clock hour, and aircraft
    at each station at each arrival time (waiting or still turning). In `constrain`
    mode these must be ≤ the limits; in `check` mode they're just reported.
@@ -154,5 +176,5 @@ aircraft end the day somewhere other than where the next day's flights start.
 `day_cycles` then joins the days: an aircraft that ends the day at X flies, the next
 day, a rotation that starts at X (its own, if it's back where it started). Following
 this until it comes back gives each aircraft's cycle: how many days until it's home
-again, and where it spends each night (`outputs/cycles_<scenario>.csv`,
+again, and where it spends each night (`outputs/<folder>/cycles_<scenario>.csv`,
 KPI `longest_cycle_days`).

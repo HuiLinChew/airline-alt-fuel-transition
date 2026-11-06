@@ -1,6 +1,6 @@
 """Module 0: scenario settings.
 
-Each scenario is a YAML file in scenarios/. It only lists the settings that
+Each scenario is a YAML file in scenarios/<timetable>/. It only lists the settings that
 differ from the defaults below.
 """
 
@@ -55,6 +55,15 @@ class Scenario:
     capacity_mode: str = "check"             # off, check (report only) or constrain
     capacity_share: float | dict = 0.15      # or {movements_per_hour: a, stands: b}
 
+    # Departure times: each leg may leave at its timetabled time or up to max_delay_min
+    # later, in steps of delay_step_min. 0 = fixed timetable (fleet assignment only).
+    max_delay_min: int = 0
+    delay_step_min: int = 10
+
+    # Bases (column `base` in airports.csv). With overnight_at_bases, every aircraft spends
+    # the night at a base (any base).
+    overnight_at_bases: bool = False
+
     period_min: int = 1440                   # 1440 = one day, 10080 = one week
     solver: dict = field(default_factory=lambda: {"time_limit_s": 60, "mip_gap": 0.0})
     sweep: dict = field(default_factory=dict)  # {parameter: ..., values: [...]}
@@ -67,16 +76,17 @@ class Scenario:
 def load_scenario(name_or_path) -> Scenario:
     path = Path(name_or_path)
     if not path.suffix:
-        path = SCENARIO_DIR / f"{name_or_path}.yaml"
+        path = list(SCENARIO_DIR.rglob(f"{name_or_path}.yaml"))[0]   # in any folder
     with open(path) as f:
         return Scenario(**yaml.safe_load(f))
 
 
-def load_all() -> list[Scenario]:
-    """All scenarios, with the baseline first."""
-    paths = sorted(SCENARIO_DIR.glob("*.yaml"))
-    paths.sort(key=lambda p: p.stem != "baseline")
-    return [load_scenario(p) for p in paths]
+def scenario_files() -> list[Path]:
+    """Scenario files, one folder per timetable, baselines first.
+    scenarios/stress_tests/ is left out (only the tests use it)."""
+    paths = [p for p in sorted(SCENARIO_DIR.glob("*/*.yaml")) if p.parent.name != "stress_tests"]
+    paths.sort(key=lambda p: not p.stem.endswith("baseline"))   # baselines first
+    return paths
 
 
 def validate(sc: Scenario, data) -> None:

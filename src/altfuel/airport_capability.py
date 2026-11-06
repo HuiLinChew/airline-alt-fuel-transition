@@ -30,6 +30,6 @@ def airport_capacity(data: Data, sc: Scenario) -> pd.DataFrame:
     share = sc.capacity_share
     if not isinstance(share, dict):
         share = {"movements_per_hour": share, "stands": share}
-    airports = data.airports
-    return pd.DataFrame({"movements_per_hour": airports.hourly_capacity * share["movements_per_hour"],
-                         "stands": airports.stands * share["stands"]})
+    movements = data.airports.hourly_capacity * share["movements_per_hour"]
+    stands = data.airports.stands * share["stands"]
+    return pd.DataFrame({"movements_per_hour": movements, "stands": stands})

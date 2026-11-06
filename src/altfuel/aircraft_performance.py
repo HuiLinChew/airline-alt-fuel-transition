@@ -40,8 +40,18 @@ def refuel_minutes(data: Data, types, kg) -> np.ndarray:
     """Plug-in/out time + fuel mass / (pumps x flow per pump). NaN if the fuel has no data."""
     aircraft = data.aircraft_types.reindex(np.asarray(types))
     fuel = data.fuels.reindex(aircraft.fuel)
-    flow_kg_s = aircraft.refuel_pumps.to_numpy(float) * fuel.refuel_flow_kg_s_per_pump.to_numpy(float)
+    pumps = aircraft.refuel_pumps.to_numpy(float)
+    flow_kg_s = pumps * fuel.refuel_flow_kg_s_per_pump.to_numpy(float)
     return fuel.refuel_plug_min.to_numpy(float) + np.asarray(kg, dtype=float) / flow_kg_s / 60
+
+
+def in_curfew(t, start, end):
+    """True where time t (minutes, any day) falls in an airport's night curfew.
+    Curfews usually run over midnight (start > end, e.g. 23:30-06:00). No curfew = blank."""
+    t = t % 1440
+    over_midnight = (t >= start) | (t < end)
+    same_day = (t >= start) & (t < end)
+    return np.where(start > end, over_midnight, same_day)
 
 
 def perf(data: Data, airport_fuel: pd.DataFrame, sc: Scenario) -> pd.DataFrame:
@@ -59,7 +69,9 @@ def perf(data: Data, airport_fuel: pd.DataFrame, sc: Scenario) -> pd.DataFrame:
     p["fuel_kg"] = fuel_kg_many(data, p.type, distance)
     p["energy_gj"] = p.fuel_kg * fuels.lhv_mj_per_kg.to_numpy() / 1000
     p["co2_ttw_t"] = p.fuel_kg * fuels.co2_kg_per_kg.to_numpy() / 1000
-    wtt = {f: sc.wtt_co2_kg_per_kg.get(f, data.fuels.at[f, "wtt_co2_kg_per_kg"]) for f in data.fuels.index}
+    # Well-to-tank CO2 per kg of fuel: fuels.csv, unless the scenario gives a value
+    wtt = data.fuels.wtt_co2_kg_per_kg.to_dict()
+    wtt.update(sc.wtt_co2_kg_per_kg)
     p["co2_wtt_t"] = p.fuel_kg * p.fuel.map(wtt) / 1000
     p["co2_t"] = p.co2_ttw_t + p.co2_wtt_t
 
@@ -74,7 +86,7 @@ def perf(data: Data, airport_fuel: pd.DataFrame, sc: Scenario) -> pd.DataFrame:
     p["block_min"] = block
     p["arr_min"] = p.dep_min.astype(int) + block
 
-    # Turn time: base turn + any extra refuelling time compared with the reference type
+    # Turn time: the type's turn + any extra refuelling time compared with the reference type
     extra = np.zeros(len(p))
     if sc.refuel_on_critical_path:
         ref_types = np.full(len(p), ref)
@@ -91,14 +103,18 @@ def perf(data: Data, airport_fuel: pd.DataFrame, sc: Scenario) -> pd.DataFrame:
     p["pax_cap"] = np.floor(p.seats * p.max_load_factor).astype(int)
     p["spill_pax"] = (p.pax - p.pax_cap).clip(lower=0).astype(int)
 
-    # Can this type fly this leg? Three separate reasons, so error messages can say which.
+    # Can this type fly this leg? Separate reasons, so error messages can say which.
     p["in_range"] = (distance <= p.range_km.to_numpy(float)) & p.fuel_kg.notna().to_numpy()
     origin_fuel = pd.MultiIndex.from_arrays([p.origin, p.fuel])
     p["fuel_at_origin"] = airport_fuel.available.reindex(origin_fuel).to_numpy(bool)
     p["fits"] = (p.spill_pax == 0) | sc.allow_spill
-    p["feasible"] = p.in_range & p.fuel_at_origin & p.fits
+    start, end = data.airports.curfew_start, data.airports.curfew_end
+    leaves_in_curfew = in_curfew(p.dep_min, p.origin.map(start), p.origin.map(end))
+    lands_in_curfew = in_curfew(p.arr_min, p.destination.map(start), p.destination.map(end))
+    p["outside_curfew"] = ~leaves_in_curfew & ~lands_in_curfew
+    p["feasible"] = p.in_range & p.fuel_at_origin & p.fits & p.outside_curfew
 
-    columns = ["fuel", "seats", "in_range", "fuel_at_origin", "fits", "pax_cap", "spill_pax",
-               "fuel_kg", "energy_gj", "co2_ttw_t", "co2_wtt_t", "block_min", "arr_min",
-               "turn_min", "co2_t", "feasible"]
+    columns = ["fuel", "seats", "in_range", "fuel_at_origin", "fits", "outside_curfew",
+               "pax_cap", "spill_pax", "fuel_kg", "energy_gj", "co2_ttw_t", "co2_wtt_t",
+               "block_min", "arr_min", "turn_min", "co2_t", "feasible"]
     return p.set_index(["type", "leg_id"])[columns].sort_index()

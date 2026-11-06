@@ -1,0 +1,5 @@
+max_delay_min,status,legs_flown,legs_dropped,aircraft,legs_delayed,total_delay_min,pax_demand,pax_spilled,pax_on_dropped_legs,energy_gj,co2_ttw_t,co2_wtt_t,co2_t,fuel_cost_usd,carbon_cost_usd,operating_cost_usd,ownership_cost_usd,spill_cost_usd,dropped_revenue_usd,longest_cycle_days,total_cost_usd,share_kerosene,share_lh2,share_ch4,share_ch4_e,capacity_breaches,peak_util_movements_per_hour,peak_util_stands
+0,Optimal,411,0,9,0,0,23364,0,0,67610.539,4945.586,0.0,4945.586,939035.264,989117.145,3777652.409,882268.378,0.0,0.0,14,4659920.787,1.0,0.0,0.0,0.0,0,0.833,0.333
+10,Optimal,411,0,9,70,470,23364,0,0,70157.926,4086.954,0.0,4086.954,1012844.936,817390.887,3679735.823,911677.324,0.0,0.0,14,4591413.146,0.672,0.102,0.226,0.0,0,0.833,0.333
+20,Optimal,411,0,9,205,2270,23364,0,0,73103.691,2680.434,0.0,2680.434,1177900.08,536086.797,3563486.877,944027.164,0.0,0.0,7,4507514.041,0.324,0.324,0.353,0.0,0,0.833,0.333
+30,Optimal,411,0,9,250,3415,23364,0,0,74460.073,2508.845,0.0,2508.845,1167600.157,501769.005,3518869.163,961672.532,0.0,0.0,7,4480541.695,0.09,0.324,0.586,0.0,0,0.833,0.333

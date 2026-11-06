@@ -10,7 +10,7 @@ import pandas as pd
 
 from . import (aircraft_performance, airport_capability, cost_revenue, network_builder,
                optimiser, rotation_checker)
-from .data_layer import Data, apply_overrides, load_data
+from .data_layer import Data, apply_overrides, delay_copies, load_data
 from .data_layer import validate as validate_data
 from .scenario_config import Scenario, validate
 
@@ -39,6 +39,8 @@ def run(sc: Scenario, data: Data = None) -> Run:
     validate(sc, data)
     data = apply_overrides(data, sc.aircraft_overrides, sc.fuel_overrides)
     validate_data(data)
+    legs = delay_copies(data.legs, sc.max_delay_min, sc.delay_step_min, sc.period_min)
+    data = replace(data, legs=legs)
 
     fuel = airport_capability.airport_fuel(data, sc)
     capacity = airport_capability.airport_capacity(data, sc)
@@ -49,13 +51,15 @@ def run(sc: Scenario, data: Data = None) -> Run:
 
     net = network_builder.build_network(data, perf, sc.period_min)
     result = optimiser.solve(net, perf, drop, ownership, capacity, sc)
-    rotations, violations = rotation_checker.build_rotations(data, perf, result.assign, result.fleet_used)
-    cycles = rotation_checker.day_cycles(rotations)
+    rotations, violations = rotation_checker.build_rotations(data, perf, result.assign,
+                                                             result.fleet_used)
+    cycles = rotation_checker.day_cycles(rotations, sc.period_min)
 
     flown = perf.reset_index().merge(result.assign.reset_index(), on=["leg_id", "type"])
     ownership = ownership * sc.period_min / 1440
-    return Run(sc, data, fuel, capacity, perf, result, rotations, violations, cycles, flown, ownership,
-               kpis(data, flown, result, drop, ownership, cycles))
+    kpi = kpis(data, flown, result, drop, ownership, cycles)
+    return Run(sc, data, fuel, capacity, perf, result, rotations, violations, cycles, flown,
+               ownership, kpi)
 
 
 def kpis(data: Data, flown: pd.DataFrame, result, drop_cost: pd.Series, ownership: pd.Series,
@@ -65,12 +69,15 @@ def kpis(data: Data, flown: pd.DataFrame, result, drop_cost: pd.Series, ownershi
 
     dropped = result.assign.index[result.assign.type == "dropped"]
     ownership_cost = sum(n * ownership[k] for k, n in result.fleet_used.items())
+    delays = data.legs.delay_min.loc[flown.leg_id]
     out = {
         "status": result.status,
         "legs_flown": len(flown),
         "legs_dropped": len(dropped),
         "aircraft": sum(result.fleet_used.values()),
-        "pax_demand": int(data.legs.pax.sum()),
+        "legs_delayed": int((delays > 0).sum()),
+        "total_delay_min": int(delays.sum()),
+        "pax_demand": int(data.legs.pax[data.legs.delay_min == 0].sum()),
         "pax_spilled": int(flown.spill_pax.sum()),
         "pax_on_dropped_legs": int(data.legs.pax.loc[dropped].sum()),
         "energy_gj": flown.energy_gj.sum(),
@@ -94,8 +101,9 @@ def kpis(data: Data, flown: pd.DataFrame, result, drop_cost: pd.Series, ownershi
     cap = result.capacity
     if len(cap):          # empty when capacity_mode is "off"
         out["capacity_breaches"] = int(cap.over.sum())
-        out["peak_util_movements_per_hour"] = cap[cap.measure == "movements_per_hour"].utilisation.max()
-        out["peak_util_stands"] = cap[cap.measure == "stands"].utilisation.max()
+        peak = cap.groupby("measure").utilisation.max()
+        out["peak_util_movements_per_hour"] = peak["movements_per_hour"]
+        out["peak_util_stands"] = peak["stands"]
     return out
 
 
@@ -116,7 +124,7 @@ def compare(runs: list[Run]) -> pd.DataFrame:
 
 
 def sweep(sc: Scenario, parameter: str, values, data: Data = None) -> pd.DataFrame:
-    """Re-run a scenario for each value of one setting, e.g. sweep(sc, "carbon_price", [0, 100, 200])."""
+    """Re-run a scenario for each value of one setting, e.g. sweep(sc, "carbon_price", [0, 200])."""
     if data is None:
         data = load_data(sc.data_path)
     rows = []

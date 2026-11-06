@@ -1,9 +1,0 @@
-# All-kerosene reference on the chains timetable (aircraft end the day away from
-# where they started and take several days to get back).
-name: chains_baseline
-description: Chains timetable, kerosene-only fleet, minimise operating cost
-data_dir: data/dummy_chains
-objective: cost
-fleet: {KER-NB: 30}
-carbon_price: 0
-wtt_co2_kg_per_kg: {kerosene: 0, lh2: 0, ch4: 0}   # well-to-tank CO2 (kg per kg fuel), 0 until sourced

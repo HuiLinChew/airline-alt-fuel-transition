@@ -17,12 +17,102 @@ built are in `methods.md`.
 | Absorption factor | Overflow at a capacity-limited airport rerouted (Hasan) | Capacity is currently check or hard limit only |
 | Weekly schedules | Use `period_min: 10080` with real weekly timetables | Already supported and tested |
 
+## From the 5 Nov 2026 meeting
+
+### Schedule optimisation (not just assignment)
+
+Idea: the airline gives a target departure time (e.g. 09:00) and daily passengers; the model
+builds the day. Arrival = departure + block time of the type chosen, then + turn time before the
+next departure. The kerosene run gives the reference arrival times.
+
+What has to be fixed for this to be solvable, from smallest to biggest change:
+
+| Step | Fixed (inputs) | Model chooses | Change to code |
+|---|---|---|---|
+| 0. Now | Each leg's departure time; passengers per leg | Type per leg (arrival follows from its speed) | None |
+| 1. Time windows (**built**, delays only) | Target departure + up to `max_delay_min` later, in `delay_step_min` steps; passengers per leg | Type **and** exact departure per leg | Done: `delay_copies` + cover per original leg. Rexing et al. 2000. Delays are free, but a second solve keeps only the delays that improve the objective; a cost per minute of delay (passengers prefer their booked time) is still to source |
+| 2. Frequencies | Passengers per **airport pair per day**; candidate departure times (e.g. hourly 06:00–22:00) | How many flights per pair, at which times, which type | Demand constraint: seats flown ≥ daily passengers per pair. Lohatepanont & Barnhart 2004 |
+| 3. Routings | Passengers per origin–destination; candidate routes (direct, or via a stop) | Direct long-haul or two medium-hauls via a stop | Passenger flow variables per route. Needed for "long-haul infeasible → fly 2 medium-hauls" |
+
+Aircraft inputs needed at every step: seats, max load factor, cruise speed (block time),
+turn time, range, price.
+
+Objectives (all are weightings of terms already in the optimiser):
+
+| Objective | How |
+|---|---|
+| Fewest aircraft | Minimise Σ n[k] (aircraft per type) |
+| Lowest capital cost | Minimise Σ price[k] × n[k] |
+| Lowest cost for the same passengers | Current cost objective, with the demand constraint of step 2 |
+
+### Year-on-year fleet stock model
+
+Start: the existing kerosene network (aircraft, passengers, legs). Each year, perturb it and
+re-solve, with last year's fleet as this year's starting fleet (+ deliveries − retirements).
+
+| Perturbation | How it enters |
+|---|---|
+| X% demand growth on every leg | Scale `pax` |
+| X% growth only in some areas (by distance band or airport type) | Scale `pax` for the matching legs |
+| Y% of fleet replaced by new-fuel aircraft, with X% growth | Fleet limits per type |
+| New legs, serving the same passengers | Needs step 2 above (demand per pair) |
+| Long-haul infeasible / too expensive → 2 medium-hauls | Needs step 3 above |
+
+Objectives: minimise cost or minimise CO₂. Time step: 1 year, or 5-year steps.
+
+### To do
+
+- Research future aviation demand (growth rates per year, by region and distance).
+- Try a multi-day cycle aircraft (chains data already gives aircraft that end the day away from base).
+- Aircraft performance: ask Maria (she is most confident on medium haul).
+
+### Low-cost carrier realism (built 6 Nov)
+
+Built: bases (`base` in airports.csv, `overnight_at_bases`), night curfews
+(`curfew_start`/`curfew_end`), and the
+`data/dummy_lcc/` timetable (lines start and end at a base, any base). Still to do:
+- source real curfew hours (LHR and AMS values are rough placeholders);
+- night stops as an option at a cost per night (hotel + crew allowance) instead of all or nothing;
+- a cost per minute of delay: in the LCC runs LH₂ needs many small delays (38 legs at ≤ 30 min);
+- daily check at base every ≤ N days for multi-day cycles (maintenance routing);
+- summer and winter timetables as separate scenarios, once real data is in.
+
+### Hub-and-wave timetable (hub carriers)
+
+Hub carriers (Emirates, BA, KLM) group arrivals and departures at the hub into waves
+("banks") so passengers can connect; spoke flights go out and back from the hub. The
+5-airport dummy network can't show this: every pair is flown direct (point-to-point),
+so there is no hub. Needs:
+- a network with a hub and spoke airports that only connect through it (real data, or a
+  dummy with e.g. 1 hub + 8-10 spokes);
+- waves: e.g. 3-6 a day, arrivals in a window before departures, set by the hub's
+  minimum connection time;
+- passengers per origin-destination with a connection at the hub (step 3 above), since
+  a wave only matters if passengers connect;
+- an LH₂ question this would answer: does LH₂'s longer turn break the wave (aircraft
+  miss the outbound bank) and how much wave length it needs.
+Ask Anil: wave length and number at Dubai, minimum connection time.
+
+### Questions for Anil (Emirates)
+
+- Hubs: where do airlines base aircraft, and how often must an aircraft return to base?
+- Waves at the hub: how many a day, how long, minimum connection time?
+- Safety checks: what checks, how often, where can they be done?
+- Operations: anything else that constrains rotations.
+
+### Presentation (end of Michaelmas)
+
+10 minutes; very clear slides with few words; about one plot per slide with one bullet underneath;
+consider putting the map below the network.
+
 ## Data to source
 
 | Item | Why it matters |
 |---|---|
-| LNG aircraft price premium | Decides whether LNG wins at all (0% → 100% of legs, +5% → 65%, +12% → 0%) |
-| LNG turnaround / refuelling rates | Currently no extra turn time for methane |
+| LNG aircraft price premium | Now +9% (Raab et al. ratio); a direct source for LNG narrowbodies would be better |
+| LNG connection time (plug-in/out, purge) | Now 9 min, as LH₂ (6 min low case); no LNG-specific data. Decides LNG on tight timetables |
+| Passenger safety zone during cryogenic refuelling | Al-Timimi: boarding and LH₂ refuelling can't overlap, narrowbody turn 37 → 48 min. Not modelled; would apply to LH₂ and maybe LNG. Add as a setting |
+| Methane slip | Unburnt CH₄ (strong greenhouse gas) not modelled; overstates LNG's CO₂ saving |
 | Well-to-tank CO₂ per fuel and production route | Placeholder 0 (e-methane −2.75) |
 | Maria's fuel-burn curves | Drop into `fuel_burn.csv`; replaces the straight-line fit |
 | Airport tier mapping (1–6) and tier price factors | Placeholders |

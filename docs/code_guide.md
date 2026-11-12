@@ -81,7 +81,7 @@ A scenario YAML only lists what differs from these defaults.
 | `fleet` | `{KER-NB: 30}` | Aircraft available per type |
 | `reference_type` | `KER-NB` | The type the timetable's block and turn times are for |
 | `fuel_max_tier` | from `fuels.csv` | A fuel is offered at airports with tier ≤ this |
-| `fuel_stations` | | Extra airports offering a fuel, e.g. `{lh2: [DUB]}` |
+| `fuel_stations` | | Extra airports offering a fuel, e.g. `{lh2: [DUB]}`. To choose exactly which airports, set that fuel's `fuel_max_tier` to 0 and list them (the scenarios do this: LH₂ at LHR, CDG, MAD) |
 | `tier_price_factor` | 1.0 / 1.1 / 1.25 by tier for LH₂ and methane (placeholder) | Smaller airports pay more |
 | `aircraft_overrides`, `fuel_overrides` | | Change one cell of a CSV, e.g. `{LH2-NB: {range_km: 2000}}` or `{CH4-NB: {fuel: ch4_e}}` |
 | `carbon_price` | 0 | USD per tonne of CO₂ burnt |

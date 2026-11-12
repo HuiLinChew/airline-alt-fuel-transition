@@ -4,7 +4,8 @@ description: Chains timetable, 200 USD/t carbon price, departures may be delayed
 data_dir: data/dummy_chains
 objective: cost
 fleet: {KER-NB: 100, LH2-NB: 100, CH4-NB: 100}   # no caps: as many aircraft of each type as the model wants
-fuel_max_tier: {lh2: 1, ch4: 2}
+fuel_max_tier: {lh2: 0, ch4: 2}   # LH2 only at the airports below; methane at tier 1-2
+fuel_stations: {lh2: [LHR, CDG, MAD]}
 carbon_price: 200
 max_delay_min: 60
 delay_step_min: 10

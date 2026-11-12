@@ -46,17 +46,18 @@ Full walk-through and every scenario setting: `docs/code_guide.md`. Sources for 
 
 ## First results (dummy data)
 
-Methane = fossil LNG (e-methane available as a switch).
+Methane = fossil LNG (e-methane available as a switch). LH₂ is sold at three airports
+(LHR, CDG, MAD; `fuel_stations`), LNG at all five.
 
 | Scenario | Aircraft | Legs: kerosene / LH₂ / LNG | CO₂ vs baseline | Total cost vs baseline |
 |---|---|---|---|---|
 | `baseline` (kerosene) | 9 | 100 / 0 / 0% | — | — |
 | `alt_min_energy` | 9 | 100 / 0 / 0% | 0% | 0% |
-| `alt_carbon_200` | 9 | 5 / 35 / 60% | −53% | +20% |
-| `alt_carbon_200_emethane` (methane aircraft on e-methane) | 9 | 45 / 55 / 0% | −59% | +21% |
-| `alt_carbon_200_spill` (150-seat LH₂, spill allowed) | 9 | 5 / 15 / 80% | −32% | +20% |
-| `alt_carbon_200_drop` (legs may be dropped) | 5 | 0 / 54 / 46% | −78% | +7% |
-| `alt_min_co2` | 10 | 0 / 65 / 35% | −72% | +18% |
+| `alt_carbon_200` | 9 | 5 / 20 / 75% | −38% | +20% |
+| `alt_carbon_200_emethane` (methane aircraft on e-methane) | 9 | 70 / 30 / 0% | −33% | +22% |
+| `alt_carbon_200_spill` (150-seat LH₂, spill allowed) | 9 | 5 / 0 / 95% | −17% | +21% |
+| `alt_carbon_200_drop` (legs may be dropped) | 5 | 0 / 31 / 69% | −62% | +7% |
+| `alt_min_co2` | 9 | 0 / 30 / 70% | −44% | +7% |
 
 Total cost = operating cost + aircraft ownership + revenue lost to spilled passengers and dropped legs.
 No fleet caps: the model may use as many aircraft of each type as it wants (`fleet` = 100 each).
@@ -69,9 +70,10 @@ Scenarios sit in one folder per timetable (`scenarios/out_and_back/`, `chains/`,
   10.4 kg/s per pump; no LNG-specific data). With no carbon price LNG still takes 15% of legs
   (unlimited fleets: premium 0% → 100%, +5% → 65%, +7.1% → 35%, +9% → 15%, +12% → 0%), and
   65–75% from 50 USD/t.
-- LH₂ takes over from LNG as the carbon price rises: 35% of legs at 200 USD/t, 55% from 250 USD/t.
-  The switch point is sensitive to placeholder costs: LH₂'s +11% maintenance (Hoelzen et al. 2022,
-  not applied yet) would move it to 250 USD/t.
+- LH₂ takes some legs from LNG as the carbon price rises: 20% of legs at 200 USD/t, 30% from
+  250 USD/t, limited by having LH₂ at only three airports. The switch point is sensitive to
+  placeholder costs: LH₂'s +11% maintenance (Hoelzen et al. 2022, not applied yet) would move it
+  past 200 USD/t.
 - e-methane (29 USD/GJ) costs more than LH₂ (21 USD/GJ), so it isn't chosen at these prices.
 - Airport capacity doesn't bind on this network.
 - A second timetable, `data/dummy_chains/` (`chains_*` scenarios), has aircraft ending the
@@ -80,7 +82,7 @@ Scenarios sit in one folder per timetable (`scenarios/out_and_back/`, `chains/`,
 - Stress tests (`scenarios/stress_tests/`): `data/dummy_irregular/` has 60 smaller flights
   at random times. Letting legs leave up to 60 min late (`max_delay_min: 60`) cuts the
   aircraft needed from 22 to 19 (kerosene only, 4 legs delayed) and, at 200 USD/t, moves
-  kerosene legs to LH₂ and LNG (CO₂ −13%, cost −6%). Delays are free, but only kept where they
+  kerosene legs to LH₂ and LNG (CO₂ −4%, cost −5%). Delays are free, but only kept where they
   help (a second solve minimises delay minutes).
 - `data/dummy_lcc/` (`lcc_*` scenarios) is low-cost-carrier style: aircraft based
   at DUB and MAD (`overnight_at_bases: true`), every line starts and ends at a base, 25-min
@@ -88,8 +90,8 @@ Scenarios sit in one folder per timetable (`scenarios/out_and_back/`, `chains/`,
   LH₂ and LNG refuelled with no passengers on board (Al-Timimi's safety-zone rule, about 12 min
   longer turns), they fly nothing at fixed times (100% kerosene); letting legs leave up to 30 min
   late, LH₂ flies 10%, LNG 34% and kerosene 56% (CO₂ 739 → 609 t). If only LH₂ needs the rule,
-  LNG flies everything; if neither does (`sequential_refuel: []`, Mangold et al.), there's no
-  lock-out at all (0 / 31 / 69%).
+  LNG flies most legs (0 / 10 / 90% with 30 min); if neither does (`sequential_refuel: []`,
+  Mangold et al.), there's no lock-out at all (0 / 10 / 90% at fixed times).
 - `data/dummy_lcc_week/` (`lcc_week_*`) runs the same timetable as a week (`period_min: 10080`)
   with fewer flights at the weekend: same 9 aircraft and a similar fuel mix, every aircraft at a base
   every night; the Gantt chart shows the whole week.

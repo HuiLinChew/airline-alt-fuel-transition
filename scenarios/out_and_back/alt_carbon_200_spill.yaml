@@ -4,7 +4,8 @@ name: alt_carbon_200_spill
 description: As alt_carbon_200 with 150-seat LH2 aircraft; excess passengers spilled (placeholder fares)
 objective: cost
 fleet: {KER-NB: 100, LH2-NB: 100, CH4-NB: 100}   # no caps: as many aircraft of each type as the model wants
-fuel_max_tier: {lh2: 1, ch4: 2}
+fuel_max_tier: {lh2: 0, ch4: 2}   # LH2 only at the airports below; methane at tier 1-2
+fuel_stations: {lh2: [LHR, CDG, MAD]}
 carbon_price: 200
 aircraft_overrides: {LH2-NB: {seats: 150}}
 allow_spill: true

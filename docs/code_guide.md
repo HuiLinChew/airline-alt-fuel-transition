@@ -31,10 +31,8 @@ Five dummy timetables share the same airports, aircraft and fuels:
 LHR→CDG→MAD→LHR, where aircraft end the day away from where they started; used by the
 `chains_*` scenarios) and `data/dummy_irregular/` (route demand split over more, smaller
 flights at random times, to test `max_delay_min`; used by the `irregular_*` scenarios).
-`data/dummy_chains_irregular/` is the chains timetable with random ground times between legs
-(`chains_irregular_*` scenarios). `data/dummy_lcc/` is a low-cost-carrier style timetable
-(`lcc_*` scenarios): aircraft based at DUB and MAD, each line starting and ending at a base,
-25-min turns away from base, curfews at LHR and AMS. `data/dummy_lcc_week/` repeats that
+`data/dummy_lcc/` is a low-cost-carrier style timetable (`lcc_*` scenarios): aircraft based at
+DUB and MAD, each line starting and ending at a base, 25-min turns, curfews at LHR and AMS. `data/dummy_lcc_week/` repeats that
 day for a week (`period_min: 10080`, `lcc_week_*` scenarios), with 2 fewer lines on Saturday
 and 1 fewer on Sunday. Each scenario is compared with the first scenario on the same data.
 
@@ -92,7 +90,7 @@ A scenario YAML only lists what differs from these defaults.
 | `yield_usd_per_pax_km` | 0.148 | Fare, if `legs.csv` has no `fare_usd` |
 | `allow_spill` | false | Fly a leg even if some passengers don't fit; they're lost at their fare |
 | `allow_drop` | false | Let the model drop legs that cost more than they earn |
-| `refuel_on_critical_path` | true | Extra refuelling time adds to the turn |
+| `sequential_refuel` | [lh2, ch4, ch4_e] | Fuels refuelled with no passengers on board (hydrogen safety zones, Al-Timimi): their whole refuel time adds to the turn. Other fuels refuel while passengers get off and on and only add any time beyond that. `[]` = Mangold et al.'s optimistic case |
 | `capacity_mode` | `check` | `off`, `check` (report runway and stand use) or `constrain` (enforce the limits) |
 | `capacity_share` | 0.15 | Share of each airport's runway movements and stands this airline can use. One number, or `{movements_per_hour: a, stands: b}` |
 | `max_delay_min` | 0 | Each leg may leave up to this many minutes after its timetabled time (never earlier). 0 = fixed timetable |

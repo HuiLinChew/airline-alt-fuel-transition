@@ -147,7 +147,8 @@ def network_map(run, background=True):
 
 
 def tail_gantt(run):
-    """One row per aircraft, one bar per flight."""
+    """One row per aircraft, one bar per flight. A delayed flight also shows its
+    timetabled time as a dotted outline."""
     colour = fuel_colours(run.data.fuels)
     fuel_of = run.data.aircraft_types.fuel
     rot = run.rotations
@@ -158,6 +159,9 @@ def tail_gantt(run):
     for r in rot.itertuples():
         row = tails.index(r.tail_id)
         start, hours = r.dep_min / 60, (r.arr_min - r.dep_min) / 60
+        if r.delay_min:
+            ax.barh(row, hours, left=start - r.delay_min / 60, height=0.62, fill=False,
+                    edgecolor=GREY, lw=0.8, linestyle=":")
         ax.barh(row, hours, left=start, height=0.62, color=colour[fuel_of[r.type]],
                 edgecolor=BACKGROUND, lw=0.5 if week else 2)
         if hours > 0.8 and not week:
@@ -185,9 +189,14 @@ def tail_gantt(run):
 
     used = {fuel_of[t] for t in rot.type}
     patches = [Patch(color=colour[f], label=run.data.fuels.label[f]) for f in colour if f in used]
+    if rot.delay_min.any():
+        patches.append(Patch(fill=False, edgecolor=GREY, linestyle=":", label="timetabled time"))
     ax.legend(handles=patches, loc="upper left", bbox_to_anchor=(1.0, 1.0), frameon=False,
               fontsize=8.5)
-    ax.set_title(f"{run.scenario.name}: tail rotations", loc="left", fontsize=11)
+    title = f"{run.scenario.name}: tail rotations"
+    if rot.delay_min.any():
+        title += f" ({(rot.delay_min > 0).sum()} flights moved later, up to {rot.delay_min.max()} min)"
+    ax.set_title(title, loc="left", fontsize=11)
     fig.tight_layout()
     return fig
 

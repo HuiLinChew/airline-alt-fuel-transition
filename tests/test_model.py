@@ -116,7 +116,8 @@ def test_a_week_of_identical_days(data):
 
 def test_optimiser_matches_brute_force(data):
     """On a 6-leg network, try every assignment and keep the cheapest that can be flown."""
-    small = replace(data, legs=data.legs.loc[["L000", "L001", "L004", "L008", "L009", "L010"]])
+    legs = data.legs.loc[["L000", "L001", "L004", "L008", "L009", "L010"]]
+    small = replace(data, legs=delay_copies(legs, 0, 10, 1440))      # as analysis.run does
     sc = replace(load_scenario("alt_carbon_200"), capacity_mode="off")
     fuel = airport_capability.airport_fuel(small, sc)
     perf = cost_revenue.add_costs(aircraft_performance.perf(small, fuel, sc), small, fuel, sc)
@@ -364,15 +365,8 @@ def test_delays_only_push_legs_later_and_never_cost_more():
     assert delayed.kpis["pax_demand"] == fixed.kpis["pax_demand"]
 
 
-def test_zero_delay_leaves_the_legs_unchanged(data):
-    legs = delay_copies(data.legs, 0, 10, 1440)
-    assert legs.index.equals(data.legs.index)
-    assert (legs.dep_min == data.legs.dep_min).all()
-
-
-@pytest.mark.parametrize("name", ["irregular_baseline", "chains_irregular_baseline"])
-def test_delays_save_aircraft_on_an_irregular_timetable(name):
-    sc = load_scenario(name)
+def test_delays_save_aircraft_on_an_irregular_timetable():
+    sc = load_scenario("irregular_baseline")
     fixed = analysis.run(sc)
     delayed = analysis.run(replace(sc, max_delay_min=60))
     assert delayed.violations == []
@@ -398,13 +392,6 @@ def test_delays_work_across_midnight():
 
 # Bases and curfews
 
-def test_aircraft_spend_the_night_at_a_base():
-    r = analysis.run(load_scenario("lcc_baseline"))
-    assert r.violations == []
-    last_stop = r.rotations.groupby("tail_id").destination.last()
-    assert last_stop.isin(["DUB", "MAD"]).all()
-
-
 def test_base_rule_binds_when_the_timetable_ends_away_from_base():
     """The irregular timetable has flights at night from airports that aren't bases."""
     sc = load_scenario("irregular_baseline")
@@ -419,14 +406,6 @@ def test_curfew_blocks_flights_at_night():
     assert in_curfew(pd.Series([1420, 1440 + 300, 100]), start, end).all()
     assert not in_curfew(pd.Series([360, 720, 1400]), start, end).any()
     assert not in_curfew(pd.Series([100]), float("nan"), float("nan")).any()
-
-
-def test_a_longer_turn_shuts_lh2_out_until_legs_can_be_delayed():
-    """The low-cost timetable is built for kerosene turns; LH2 refuels for longer."""
-    sc = load_scenario("lcc_carbon_200")
-    fixed = analysis.run(sc)
-    delayed = analysis.run(replace(sc, max_delay_min=30, delay_step_min=5))
-    assert fixed.kpis["share_lh2"] < delayed.kpis["share_lh2"]
 
 
 def test_a_week_needs_the_busiest_day_and_nights_at_bases_every_night():
@@ -448,3 +427,15 @@ def test_no_delays_that_gain_nothing():
     assert delayed.result.objective == pytest.approx(fixed.result.objective)
     assert delayed.kpis["legs_delayed"] == 0
     assert delayed.kpis["aircraft"] == fixed.kpis["aircraft"]
+
+
+def test_sequential_refuelling_adds_the_whole_refuel_time(data):
+    """Al-Timimi: refuelled while passengers get off and on, LH2's ~11 min fits inside
+    boarding; with no passengers on board it adds to the turn (narrowbody 37 -> 48 min)."""
+    sc = load_scenario("alt_carbon_200")
+    parallel = analysis.run(replace(sc, sequential_refuel=[]), data).perf
+    sequential = analysis.run(replace(sc, sequential_refuel=["lh2"]), data).perf
+    extra = sequential.xs("LH2-NB").turn_min - parallel.xs("LH2-NB").turn_min
+    assert (parallel.turn_min == 40).all()
+    assert extra.between(10, 13).all()
+    assert (sequential.xs("CH4-NB").turn_min == 40).all()

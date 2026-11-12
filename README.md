@@ -80,18 +80,16 @@ Scenarios sit in one folder per timetable (`scenarios/out_and_back/`, `chains/`,
 - Stress tests (`scenarios/stress_tests/`): `data/dummy_irregular/` has 60 smaller flights
   at random times. Letting legs leave up to 60 min late (`max_delay_min: 60`) cuts the
   aircraft needed from 22 to 19 (kerosene only, 4 legs delayed) and, at 200 USD/t, moves
-  kerosene legs to LH₂ and LNG (CO₂ −13%, cost −6%). Delays are free, but only kept where they help (a second solve minimises delay minutes).
-- `data/dummy_chains_irregular/` (also a stress test) is the chains
-  timetable with random 25–75 min ground times, so some connections are shorter than a turn.
-  Fixed times need 13 aircraft instead of 11; with delays of up to 10 min it's back to 11
-  aircraft, and at 200 USD/t and up to 60 min LH₂ flies 38% of legs (10% at fixed times) and
-  CO₂ falls from 392 t to 233 t.
+  kerosene legs to LH₂ and LNG (CO₂ −13%, cost −6%). Delays are free, but only kept where they
+  help (a second solve minimises delay minutes).
 - `data/dummy_lcc/` (`lcc_*` scenarios) is low-cost-carrier style: aircraft based
   at DUB and MAD (`overnight_at_bases: true`), every line starts and ends at a base, 25-min
-  turns, curfews at LHR and AMS. The timetable is built for kerosene turns, so at 200 USD/t (fleet and fuels as alt_carbon_200) LH₂ and LNG, both about
-  6 min longer to refuel, fly nothing at fixed times (100% kerosene); letting legs leave up to
-  30 min late, LH₂ flies 31%, LNG 58% and kerosene 11% (CO₂ 739 → 388 t). With LNG's
-  connection at 6 min instead of 9, LNG takes 21% even at fixed times.
+  turns, curfews at LHR and AMS. The timetable is built for kerosene turns. At 200 USD/t, with
+  LH₂ and LNG refuelled with no passengers on board (Al-Timimi's safety-zone rule, about 12 min
+  longer turns), they fly nothing at fixed times (100% kerosene); letting legs leave up to 30 min
+  late, LH₂ flies 10%, LNG 34% and kerosene 56% (CO₂ 739 → 609 t). If only LH₂ needs the rule,
+  LNG flies everything; if neither does (`sequential_refuel: []`, Mangold et al.), there's no
+  lock-out at all (0 / 31 / 69%).
 - `data/dummy_lcc_week/` (`lcc_week_*`) runs the same timetable as a week (`period_min: 10080`)
   with fewer flights at the weekend: same 9 aircraft and a similar fuel mix, every aircraft at a base
   every night; the Gantt chart shows the whole week.

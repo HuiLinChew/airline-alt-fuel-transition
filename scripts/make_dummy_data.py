@@ -2,18 +2,17 @@
 
     uv run scripts/make_dummy_data.py [path/to/hydrogen-airport-model/data/raw]
 
-Writes airports.csv, legs.csv and aircraft_types.csv to six folders:
+Writes airports.csv, legs.csv and aircraft_types.csv to five folders:
   data/dummy/            out-and-back timetable: every aircraft can be home each night
   data/dummy_chains/     chains timetable: aircraft end the day at different airports
                          and take several days to get back to where they started
   data/dummy_irregular/  irregular timetable: more, smaller flights at random times,
                          to test departure delays (max_delay_min)
-  data/dummy_chains_irregular/  the chains timetable with random ground times between legs
   data/dummy_lcc/        low-cost-carrier style: aircraft based at DUB and MAD, short
                          turns away from base, night curfews at LHR and AMS
   data/dummy_lcc_week/   the same over a week (period_min: 10080), fewer lines at the weekend
 fuels.csv is written by hand (constants and literature prices) in data/dummy/ and
-copied to the other folders. The two irregular timetables are stress tests
+copied to the other folders. The irregular timetable is a stress test
 (scenarios/stress_tests/).
 
 The dummy schedule is invented: real timed schedules (ADS-B / OpenSky) will
@@ -32,7 +31,6 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "data" / "dummy"
 OUT_CHAINS = ROOT / "data" / "dummy_chains"
 OUT_IRREGULAR = ROOT / "data" / "dummy_irregular"
-OUT_CHAINS_IRREGULAR = ROOT / "data" / "dummy_chains_irregular"
 OUT_LCC = ROOT / "data" / "dummy_lcc"
 OUT_LCC_WEEK = ROOT / "data" / "dummy_lcc_week"
 HASAN_RAW = ROOT.parent / "hydrogen-airport-model" / "data" / "raw"
@@ -155,11 +153,9 @@ def build_legs():
     return number_legs(rows)
 
 
-def build_chain_legs(rng=None):
+def build_chain_legs():
     """Daily timed legs from CHAIN_CYCLES. Each line starts between 06:30 and about
-    10:30 and its legs follow each other with CHAIN_TURN minutes on the ground, or,
-    given a random generator, a random 25-75 min (some shorter than a turn, so the
-    line's own aircraft can't always fly the next leg on time).
+    10:30 and its legs follow each other with CHAIN_TURN minutes on the ground.
     A route's daily passengers are split over its legs, capped at seats x load
     factor so every leg can be flown (this timetable tests rotations, not demand)."""
     pax, km = route_data()
@@ -176,7 +172,7 @@ def build_chain_legs(rng=None):
             rows.append(dict(origin=a, destination=b, dep_min=t, arr_min=t + block,
                              distance_km=round(km[a, b], 1),
                              pax=min(round(pax[a, b] / legs_per_route[a, b]), max_pax)))
-            t += block + (CHAIN_TURN if rng is None else to5(rng.uniform(25, 75)))
+            t += block + CHAIN_TURN
     return number_legs(rows)
 
 
@@ -277,7 +273,6 @@ if __name__ == "__main__":
         (OUT, build_legs(), airports, aircraft),
         (OUT_CHAINS, build_chain_legs(), airports, aircraft),
         (OUT_IRREGULAR, build_irregular_legs(), airports, aircraft),
-        (OUT_CHAINS_IRREGULAR, build_chain_legs(np.random.default_rng(SEED)), airports, aircraft),
         (OUT_LCC, build_lcc_legs(), lcc_airports, lcc_aircraft),
         (OUT_LCC_WEEK, build_lcc_legs(7, LCC_WEEK_SKIP), lcc_airports, lcc_aircraft),
     ]

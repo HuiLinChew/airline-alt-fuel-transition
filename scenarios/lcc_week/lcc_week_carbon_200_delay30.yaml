@@ -10,5 +10,5 @@ carbon_price: 200
 overnight_at_bases: true
 max_delay_min: 30
 delay_step_min: 5
-sweep: {parameter: max_delay_min, values: [0, 10, 20, 30]}
+solver: {time_limit_s: 300}     # a week with delays takes about 70 s
 period_min: 10080              # one week: the timetable repeats every 7 days

@@ -43,7 +43,8 @@ def build_rotations(data: Data, perf: pd.DataFrame, assign: pd.DataFrame, fleet_
             waiting.setdefault(leg.destination, []).append((ready, tail))
             last_station[tail] = leg.destination
             rows.append({"tail_id": tail, "type": ac_type, "leg_id": leg_id, "origin": leg.origin,
-                         "destination": leg.destination, "dep_min": leg.dep_min, "arr_min": arr})
+                         "destination": leg.destination, "dep_min": leg.dep_min, "arr_min": arr,
+                         "delay_min": leg.delay_min})
 
         needed, counted = len(first_station), fleet_used.get(ac_type, 0)
         if needed > counted:
@@ -51,7 +52,8 @@ def build_rotations(data: Data, perf: pd.DataFrame, assign: pd.DataFrame, fleet_
         if Counter(first_station.values()) != Counter(last_station.values()):
             problems.append(f"{ac_type}: aircraft end the day where the next day's flights don't start")
 
-    columns = ["tail_id", "type", "leg_id", "origin", "destination", "dep_min", "arr_min"]
+    columns = ["tail_id", "type", "leg_id", "origin", "destination", "dep_min", "arr_min",
+               "delay_min"]
     return pd.DataFrame(rows, columns=columns), problems
 
 

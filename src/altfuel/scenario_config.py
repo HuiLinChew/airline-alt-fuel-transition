@@ -49,7 +49,10 @@ class Scenario:
     # Passengers: by default every passenger must be carried
     allow_spill: bool = False                # fly the leg and lose passengers who don't fit
     allow_drop: bool = False                 # drop whole legs that cost more than they earn
-    refuel_on_critical_path: bool = True     # extra refuelling time adds to the turn
+
+    # Fuels refuelled with no passengers on board (hydrogen safety zones, Al-Timimi), so
+    # refuelling adds to the turn; other fuels refuel while passengers get off and on.
+    sequential_refuel: list = field(default_factory=lambda: ["lh2", "ch4", "ch4_e"])
 
     # Airport capacity: limits are capacity_share x the airport totals in airports.csv
     capacity_mode: str = "check"             # off, check (report only) or constrain

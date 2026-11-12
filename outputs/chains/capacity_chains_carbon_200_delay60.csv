@@ -93,15 +93,15 @@ AMS,stands,790,24.75,0,0.0,False
 AMS,stands,820,24.75,0,0.0,False
 AMS,stands,830,24.75,0,0.0,False
 AMS,stands,840,24.75,0,0.0,False
-AMS,stands,850,24.75,1,0.04,False
+AMS,stands,850,24.75,0,0.0,False
 AMS,stands,860,24.75,1,0.04,False
 AMS,stands,870,24.75,1,0.04,False
 AMS,stands,880,24.75,1,0.04,False
 AMS,stands,895,24.75,1,0.04,False
 AMS,stands,905,24.75,1,0.04,False
 AMS,stands,915,24.75,1,0.04,False
-AMS,stands,925,24.75,2,0.081,False
-AMS,stands,935,24.75,3,0.121,False
+AMS,stands,925,24.75,1,0.04,False
+AMS,stands,935,24.75,2,0.081,False
 AMS,stands,945,24.75,3,0.121,False
 AMS,stands,950,24.75,4,0.162,False
 AMS,stands,955,24.75,3,0.121,False
@@ -150,8 +150,8 @@ CDG,stands,740,38.4,1,0.026,False
 CDG,stands,750,38.4,1,0.026,False
 CDG,stands,760,38.4,1,0.026,False
 CDG,stands,780,38.4,2,0.052,False
-CDG,stands,790,38.4,1,0.026,False
-CDG,stands,795,38.4,2,0.052,False
+CDG,stands,790,38.4,2,0.052,False
+CDG,stands,795,38.4,3,0.078,False
 CDG,stands,800,38.4,2,0.052,False
 CDG,stands,805,38.4,2,0.052,False
 CDG,stands,810,38.4,2,0.052,False
@@ -195,7 +195,7 @@ DUB,stands,770,15.0,1,0.067,False
 DUB,stands,775,15.0,1,0.067,False
 DUB,stands,780,15.0,1,0.067,False
 DUB,stands,785,15.0,0,0.0,False
-DUB,stands,790,15.0,1,0.067,False
+DUB,stands,790,15.0,0,0.0,False
 DUB,stands,800,15.0,1,0.067,False
 DUB,stands,810,15.0,1,0.067,False
 DUB,stands,1010,15.0,1,0.067,False
@@ -239,7 +239,7 @@ LHR,stands,690,24.9,2,0.08,False
 LHR,stands,700,24.9,2,0.08,False
 LHR,stands,710,24.9,2,0.08,False
 LHR,stands,720,24.9,2,0.08,False
-LHR,stands,730,24.9,1,0.04,False
+LHR,stands,730,24.9,2,0.08,False
 LHR,stands,740,24.9,0,0.0,False
 LHR,stands,800,24.9,1,0.04,False
 LHR,stands,810,24.9,1,0.04,False

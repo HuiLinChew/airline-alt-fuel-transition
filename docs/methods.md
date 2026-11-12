@@ -13,7 +13,7 @@ Module numbers follow the planning sheet (FYP_Papers.xlsx, "Code modules").
 | 2 Airport capability | Runway movements per hour and stands, × the airline's share | Kinene & Birolini 2024 (constraint 16: movements per period ≤ airport capacity); Rau et al. 2024 (constraint 6: slot limit); Al-Timimi (stand/gate capacity) | Airline share is a placeholder; Hasan's absorption factor (rerouting overflow) to come |
 | 3 Aircraft performance | Range check; fuel at origin required (refuel every departure) | Kamat et al. (range in FAM); Wu et al. 2025 (LH2 aircraft use LH2 airports); Sirtori et al. | Done; tankering later (Sirtori half-range rule, Randeraad) |
 | 3 Aircraft performance | Fuel burn linear in distance per type | Planning sheet; fit to Sanford's short-haul range-fuel curves (as used by Al-Timimi), R² > 0.999 | To be replaced by Maria's non-linear data |
-| 3 Aircraft performance | LH2 turn time = base + extra refuel time (plug in/out + mass ÷ pump flow) | Al-Timimi refuelling-time equations; base turn 40 min from Akinola et al. | Mangold et al. find LH2 refuelling need not extend turns: switch off with `refuel_on_critical_path: false` |
+| 3 Aircraft performance | Turn time (Al-Timimi Eqs. 7, 8, 12): refuel = plug in/out + mass ÷ pump flow; passengers off and on = 2 × (0.08 × passengers + 5) min. Kerosene refuels while passengers get off and on, so its turn (`turn_min`) covers max(refuel, passengers). Fuels in `sequential_refuel` (default LH₂ and LNG) refuel with no passengers on board and add their whole refuel time (narrowbody about +11 min) | Al-Timimi (hydrogen safety zones); base turn 40 min from Akinola et al. LNG treated like LH₂ (no LNG data) | Mangold et al. find LH2 refuelling need not extend turns: `sequential_refuel: []` (every fuel refuels during boarding, so about 0 extra) |
 | 5 Cost/revenue | c = fuel × local price + carbon price × CO2 + block hours × hourly cost | Rau et al., Dray et al. (DOC per flight); Wu et al. (Eq. 10 carbon tax in objective) | Hourly cost and fares are placeholders |
 | 5 Cost/revenue | Ownership per aircraft used per day = price × (annuity + insurance) / 365 | Hoelzen et al. 2022 (App. A, Eqs. A7–A8); fixed cost per aircraft in the FAM: Justin et al. 2022, Kinene & Birolini 2024; Proesmans et al. 2023 | Done |
 | 5 Cost/revenue | Dropping a leg costs its lost revenue | Wu et al. 2025 (Eq. 2 cancellation) | Off by default (serve every passenger) |
@@ -61,7 +61,8 @@ Module numbers follow the planning sheet (FYP_Papers.xlsx, "Code modules").
 
 | Approximation | Effect |
 |---|---|
-| Extra LH₂ refuelling time is added to the turn after a leg, using that (inbound) leg's fuel as a proxy for the next leg's | On this network the extra is 6 min on every leg, so no difference; matters only for very unequal consecutive legs |
+| Extra refuelling time is added to the turn after a leg, using that (inbound) leg's fuel as a proxy for the next leg's | Sequential LH₂ and LNG add about 11–12 min on every leg here, so little difference; matters only for very unequal consecutive legs |
+| Only refuelling and passengers are in the turn rule; catering, cleaning etc. are inside `turn_min` | As in Al-Timimi |
 | Extra refuelling time is never negative: if an alternative fuel refuels faster than kerosene, no time is saved | Conservative |
 | Ownership is charged for aircraft used, not for aircraft owned but idle | Correct for planning one schedule; the stock-flow module will charge the whole owned fleet |
 | Spilled passengers are lost, not rebooked (no recapture) | Overstates the cost of spill |
@@ -85,9 +86,11 @@ the other fuel and offers it: see `scenarios/out_and_back/alt_carbon_200_emethan
 With these prices fossil LNG is cheaper per GJ than kerosene, so the LNG aircraft premium decides
 how much LNG flies with no carbon price. On the dummy network (unlimited fleets, no carbon price):
 premium 0% → 100% of legs LNG; +5% → 65%; +7.1% → 35%; +9% (used) → 15%; +12% → 0%.
-LNG refuels about 6 min slower than kerosene, like LH₂ (connection time dominates; the LNG pumping
-itself is fast). On tight timetables this keeps LNG out unless legs can be delayed; the 6-min
-connection low case lets it back in (low-cost timetable at 200 USD/t, fixed times: 0% → 21% LNG).
+LNG is refuelled with no passengers on board, like LH₂ (Al-Timimi's safety-zone rule; no LNG data),
+so its turn is about 12 min longer than kerosene's (the connection time dominates; the pumping itself
+is fast). On tight timetables this keeps LNG out unless legs can be delayed (low-cost timetable at
+200 USD/t: 0% LNG at fixed times, 34% with up to 30 min of delay). With the rule for LH₂ only, LNG
+flies every leg there.
 Methane slip (unburnt CH₄, a strong greenhouse gas) is not modelled, so LNG's CO₂ saving is overstated.
 
 ## Planned: tankering and boil-off

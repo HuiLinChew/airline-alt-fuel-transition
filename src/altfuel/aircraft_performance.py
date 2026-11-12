@@ -86,22 +86,28 @@ def perf(data: Data, airport_fuel: pd.DataFrame, sc: Scenario) -> pd.DataFrame:
     p["block_min"] = block
     p["arr_min"] = p.dep_min.astype(int) + block
 
-    # Turn time: the type's turn + any extra refuelling time compared with the reference type
-    extra = np.zeros(len(p))
-    if sc.refuel_on_critical_path:
-        ref_types = np.full(len(p), ref)
-        ref_kg = fuel_kg_many(data, ref_types, distance)
-        extra = refuel_minutes(data, p.type, p.fuel_kg) - refuel_minutes(data, ref_types, ref_kg)
-        extra[(p.type == ref).to_numpy()] = 0
-        no_data = np.isnan(extra)
-        for ac_type in sorted(p.type[no_data].unique()):
-            warnings.warn(f"no refuelling data for {ac_type}'s fuel, so no extra turn time")
-        extra = np.where(no_data, 0, np.maximum(extra, 0))
-    p["turn_min"] = np.round(p.turn_min.to_numpy(float) + extra).astype(int)
-
     # Seats and spilled passengers
     p["pax_cap"] = np.floor(p.seats * p.max_load_factor).astype(int)
     p["spill_pax"] = (p.pax - p.pax_cap).clip(lower=0).astype(int)
+
+    # Turn time (Al-Timimi Eqs. 7, 8 and 12). The type's turn_min is a kerosene turn, in
+    # which refuelling happens while passengers get off and on, so it lasts
+    # max(refuel, passengers). A fuel refuelled the same way adds only what its refuelling
+    # takes beyond that; a fuel refuelled with no passengers on board (sequential_refuel,
+    # hydrogen safety zones) takes refuel + passengers.
+    carried = np.minimum(p.pax, p.pax_cap).to_numpy(float)
+    passengers = 2 * (0.08 * carried + 5)              # off and on, minutes
+    ref_types = np.full(len(p), ref)
+    ref_refuel = refuel_minutes(data, ref_types, fuel_kg_many(data, ref_types, distance))
+    refuel = refuel_minutes(data, p.type, p.fuel_kg)
+    sequential = p.fuel.isin(sc.sequential_refuel).to_numpy()
+    turn = np.where(sequential, refuel + passengers, np.maximum(refuel, passengers))
+    extra = turn - np.maximum(ref_refuel, passengers)
+    no_data = np.isnan(extra)
+    for ac_type in sorted(p.type[no_data].unique()):
+        warnings.warn(f"no refuelling data for {ac_type}'s fuel, so no extra turn time")
+    extra = np.where(no_data, 0, np.maximum(extra, 0))
+    p["turn_min"] = np.round(p.turn_min.to_numpy(float) + extra).astype(int)
 
     # Can this type fly this leg? Separate reasons, so error messages can say which.
     p["in_range"] = (distance <= p.range_km.to_numpy(float)) & p.fuel_kg.notna().to_numpy()

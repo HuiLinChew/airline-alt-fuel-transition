@@ -105,13 +105,26 @@ Ask Anil: wave length and number at Dubai, minimum connection time.
 10 minutes; very clear slides with few words; about one plot per slide with one bullet underneath;
 consider putting the map below the network.
 
+## "Who wins" chart: LH₂ price × carbon price
+
+A grid of runs, LH₂ price (e.g. 2.0–3.0 $/kg) against carbon price (0–400 $/t), each square
+coloured by the fuel that flies most legs. The boundary between colours shows what LH₂ needs to
+win, without predicting its price; the order kerosene → LNG → LH₂ stays the same, only where the
+boundary falls moves. About 40 runs, seconds. Candidate for the report, or the presentation
+backup on LH₂ price.
+
+LH₂ colour (grey / blue / green): decided not to research price forecasts by colour (an input
+others forecast, not this project's question). Use Hoelzen's delivered-at-airport range as a
+sensitivity and state the assumption "green LH₂, zero well-to-tank CO₂". Colour mainly matters
+for CO₂: grey or blue would need a well-to-tank value (see Data to source).
+
 ## Data to source
 
 | Item | Why it matters |
 |---|---|
 | LNG aircraft price premium | Now +9% (Raab et al. ratio); a direct source for LNG narrowbodies would be better |
 | LNG connection time (plug-in/out, purge) | Now 9 min, as LH₂ (6 min low case); no LNG-specific data. Decides LNG on tight timetables |
-| Passenger safety zone during cryogenic refuelling | Al-Timimi: boarding and LH₂ refuelling can't overlap, narrowbody turn 37 → 48 min. Not modelled; would apply to LH₂ and maybe LNG. Add as a setting |
+| Passenger safety zone for LNG | Built as `sequential_refuel` (Al-Timimi's rule, default LH₂ and LNG). Whether LNG needs it is unknown; it decides whether LNG can fly tight timetables |
 | Methane slip | Unburnt CH₄ (strong greenhouse gas) not modelled; overstates LNG's CO₂ saving |
 | Well-to-tank CO₂ per fuel and production route | Placeholder 0 (e-methane −2.75) |
 | Maria's fuel-burn curves | Drop into `fuel_burn.csv`; replaces the straight-line fit |

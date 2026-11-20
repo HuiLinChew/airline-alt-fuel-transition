@@ -100,23 +100,33 @@ Scenarios sit in one folder per timetable (`scenarios/out_and_back/`, `chains/`,
 - The drop, spill and capacity results only show the mechanisms work: crew and
   maintenance costs and the airline's capacity share are still placeholders.
 
-## Real network: Ryanair (September 2022)
+## Real network: Ryanair (September 2025)
 
-`scripts/make_ryanair_data.py` builds real days of Ryanair flying from the OpenSky flight list
-(Zenodo, 2019–2022) and saves the cleaned month as `data/ryanair/flights_clean.csv` (not in git,
-non-commercial licence). Cleaning: missing airports from where the aircraft was seen (or its
-previous or next flight), neighbouring-airfield mix-ups corrected (an aircraft lands where it
-next takes off), codes OurAirports doesn't know added, gate times estimated (taxi and climb
-added), missing flights added in gaps. The days are run as a one-off stretch (`repeat: false`):
-aircraft start and end where they really did, and every night in between is at a real night stop.
+`scripts/make_ryanair_data.py` builds real days of Ryanair flying from EUROCONTROL's Aviation
+Data Repository for Research (every commercial flight in Europe, with registrations and gate
+times; research use only, so `data/ryanair_*/` is not in git). An aircraft's flights are joined
+in order; where it lands at A and next leaves from B, a positioning flight is missing from the
+data and one is added in the gap. Aircraft are kept if every turn is at least 20 min (gate time,
+assuming 5 min taxiing in). The days are run as a one-off stretch (`repeat: false`): aircraft
+start and end where they really did, and every night in between is at a real night stop.
 
-| Stretch | Aircraft kept (of ~500) | Flights | Aircraft needed: Ryanair / model | Same next flight where only one aircraft was waiting |
+| Stretch (from Wed 17 Sep) | Aircraft kept (of ~595) | Flights | Aircraft needed: Ryanair / model | Same next flight where only one aircraft was waiting |
 |---|---|---|---|---|
-| 1 day (14 Sep) | 406 (81%) | 2,355 | 406 / 402 | 100% |
-| 4 days (14–17 Sep) | 231 (46%) | 5,166 | 231 / 231 | 100% |
+| 1 day | 559 (94%) | 3,281 | 559 / 555 | 100% |
+| 4 days | 513 (86%) | 12,013 | 513 / 510 | 100% |
+| 7 days | 431 (72%) | 17,447 | 431 / 428 | 100% |
 
-Fewer aircraft have four complete days than one. Where several aircraft were waiting, any of
-them could take the next flight and the model has no reason to prefer one (Ryanair picks by
-crew and maintenance), so those turns can't be compared tail by tail (about half match).
-Ryanair's real rotations are one valid answer, so the model can't need more aircraft.
-Allowing 20-min turns keeps 433 aircraft (87%) on the one day. Passengers are 189 seats × 94%.
+Ryanair's real rotations are one valid answer, so the model can't need more aircraft; it needs
+under 1% fewer. Where several aircraft were waiting, any of them could take the next flight
+(Ryanair picks by crew and maintenance), so those turns can't be compared tail by tail (about
+half match). Other days (3, 10, 20, 24 Sep) give the same picture. Passengers are 189 seats × 94%.
+Details: `docs/ryanair_validation.md`.
+
+**Fuel at airports is the bottleneck.** On the real day at 200 $/t, with LH₂ and LNG sold only at
+the busiest N airports (kerosene everywhere), the share of flights still on kerosene is:
+5 airports 99%, 10 95%, 20 90%, 40 74%, 80 47%, all 208 28%. An aircraft can only switch if every
+airport in its day sells its fuel, and Ryanair's aircraft spread over many airports. Past about
+40 airports the turnaround takes over: with no boarding while LH₂ or LNG is loaded
+(`sequential_refuel`, Al-Timimi), aircraft with tight turns stay on kerosene. If refuelling can
+overlap boarding (`sequential_refuel: []`), kerosene falls to 38% at 80 airports and 0.4% at all.
+(`scripts/slide_figures.py`, `outputs/slides/8_fuel_at_airports.png`.)

@@ -29,6 +29,7 @@ class Network:
 
 
 def build_network(data: Data, perf: pd.DataFrame, period_min: int, repeat=True) -> Network:
+    """Nodes and flight arcs for every type, from the (type, leg) pairs that can be flown."""
     f = perf[perf.feasible].reset_index()
     legs = data.legs.loc[f.leg_id]
     f["origin"] = legs.origin.to_numpy()

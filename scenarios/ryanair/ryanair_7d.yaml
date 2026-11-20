@@ -1,0 +1,11 @@
+# Seven real days of Ryanair flying (EUROCONTROL, 17-23 Sep 2025), kerosene only.
+# Build the data first: uv run scripts/make_ryanair_data.py <Flights file> 2025-09-17 7
+name: ryanair_7d
+description: Seven real Ryanair days (aircraft whose 7 days are all known), kerosene only, nights at a night stop
+data_dir: data/ryanair_7d
+objective: cost
+fleet: {KER-NB: 1000}   # no cap
+overnight_at_bases: true
+repeat: false           # real days: aircraft start and end where they really did
+capacity_mode: "off"    # no runway or stand data for these airports yet
+period_min: 10080     # 7 days

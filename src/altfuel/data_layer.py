@@ -20,6 +20,7 @@ class Data:
 
 
 def load_data(data_dir) -> Data:
+    """Read the input tables from a data folder and check them. fuel_burn.csv is optional."""
     burn_file = data_dir / "fuel_burn.csv"
     if burn_file.exists():
         fuel_burn = read_csv(burn_file)

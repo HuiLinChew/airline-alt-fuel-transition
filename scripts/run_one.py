@@ -16,6 +16,7 @@ from altfuel.utils import OUTPUT_DIR
 
 
 def main():
+    """Run the scenario named on the command line, print its numbers, save two figures."""
     sc = load_scenario(sys.argv[1])
     run = analysis.run(sc)
     for name, value in run.kpis.items():

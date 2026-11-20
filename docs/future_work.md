@@ -22,15 +22,26 @@ Answer for "which route would LH₂ serve if only one aircraft is introduced": t
 shuttle (longest route between two hydrogen airports), in every case tested.
 
 ### Added 18–20 Nov (after the Ryanair validation)
-- **EUROCONTROL flights file** (access granted 20 Nov): rebuild the Ryanair network from it
-  (real gate times, airports and aircraft types on every flight); aim for ~100% of aircraft.
+- ~~**EUROCONTROL flights file**~~ Done 20 Nov: September 2025, 559 / 555 aircraft on one
+  day (94% of the fleet), within 1% over 4 and 7 days (`docs/ryanair_validation.md`).
 - **Aircraft-type test**: give the model Ryanair's real mix (737-800, 737 MAX 8-200, A320) and
   check it puts each type on the same flights. Needs per-type fuel burn (OpenAP has B738, B38M,
   A320) and each type restricted to its real bases. Validates the fleet assignment itself.
-- Other checks: a winter day (Dec 2022), a second airline (easyJet, mixed fleet), Ryanair's
-  published utilisation and average flight length.
-- **Fuel at airports on the real network**: % of flights switching vs number of airports with
-  new fuel (first runs: 20 busiest → 11%, 80 → 45%). Candidate main results figure.
+  EUROCONTROL gives the type of every flight.
+- Other checks: a winter day (December file from EUROCONTROL), a second airline (easyJet,
+  mixed fleet), Ryanair's published utilisation and average flight length.
+- ~~**Fuel at airports on the real network**~~ Done 20 Nov on the 2025 network: kerosene share
+  99 / 95 / 90 / 74 / 47 / 28% with new fuel at the busiest 5 / 10 / 20 / 40 / 80 / all 208
+  airports (`outputs/slides/8_fuel_at_airports.png`). Two bottlenecks: fuel at airports up to
+  ~40 airports, then the turnaround (refuelling during boarding: 38% at 80, 0.4% at all). Next:
+  which airports to pick (busiest vs most-based vs chosen by the model).
+- **Extra aircraft for the switch** (Hui, 20 Nov): how many more aircraft than the all-kerosene
+  baseline does the best kerosene / LH₂ / LNG mix need, with new fuels at selected airports?
+  Needs: which airports, how much re-timing is allowed and what it costs. First numbers on the
+  real day, new fuels at every airport, 200 $/t (vs kerosene at the same re-timing allowance):
+  kerosene allowed +2 aircraft; no kerosene +139 at fixed times, +30 at ≤ 10 min, +11 at ≤ 20 min.
+- **Sensitivities for the validation**: taxi-in 3 / 5 / 7 min (no new data); a winter day
+  (latest December in ADRR) and a June peak day; optionally September 2024.
 
 ## Model
 
@@ -159,7 +170,7 @@ for CO₂: grey or blue would need a well-to-tank value (see Data to source).
 | Maria's fuel-burn curves | Drop into `fuel_burn.csv`; replaces the straight-line fit |
 | Airport tier mapping (1–6) and tier price factors | Placeholders |
 | Airline share of each airport's capacity | Placeholder 15%; method in the Model table above (current share × future capacity) |
-| Real timetable (OpenSky / ADS-B) | Replaces the dummy 40 legs |
+| ~~Real timetable~~ | Done: EUROCONTROL Ryanair data (`docs/ryanair_validation.md`) |
 | Inputs on one year basis | Demand 2015, prices 2027/2050, aircraft price 2021 |
 
 ## What Maria's aircraft data will replace
@@ -209,8 +220,9 @@ capacity check on), after the Nov 2026 speed-ups:
 | 1,000 | 0.8 s |
 | 2,000 | 1.4 s (was 12.9 s, mostly in `capacity_usage`) |
 
-Real networks have more stations and less regular timetables, so solve times will be
-higher; re-benchmark when real data arrives, and again once tankering layers are added.
+Real Ryanair network (20 Nov): kerosene only, 3,281 legs (1 day) to 17,447 legs (7 days) in a
+few seconds; three fuels on one day 2–40 s (slowest with new fuel at all 208 airports).
+Re-benchmark once tankering layers are added.
 
 ## Housekeeping
 

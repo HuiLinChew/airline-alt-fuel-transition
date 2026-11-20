@@ -33,6 +33,7 @@ def fuel_kg_many(data: Data, types, distances) -> np.ndarray:
 
 
 def fuel_kg(data: Data, ac_type: str, distance_km: float) -> float:
+    """Fuel burn for one type and distance (the single-value version of fuel_kg_many)."""
     return float(fuel_kg_many(data, [ac_type], [distance_km])[0])
 
 
@@ -55,6 +56,8 @@ def in_curfew(t, start, end):
 
 
 def perf(data: Data, airport_fuel: pd.DataFrame, sc: Scenario) -> pd.DataFrame:
+    """What each aircraft type in the fleet does on each leg: fuel, energy, CO2, block and
+    turn times, seats and spill, and whether it can fly the leg at all (and if not, why)."""
     aircraft = data.aircraft_types
     ref = sc.reference_type
     in_fleet = [t for t in aircraft.index if sc.fleet.get(t, 0) > 0]

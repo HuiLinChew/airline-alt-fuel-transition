@@ -34,6 +34,8 @@ class Run:
 
 
 def run(sc: Scenario, data: Data = None) -> Run:
+    """Run one scenario through every module. Pass `data` to reuse tables already loaded
+    (or to try changed ones); otherwise they come from the scenario's data folder."""
     if data is None:
         data = load_data(sc.data_path)
     validate(sc, data)
@@ -64,6 +66,7 @@ def run(sc: Scenario, data: Data = None) -> Run:
 
 def kpis(data: Data, flown: pd.DataFrame, result, drop_cost: pd.Series, ownership: pd.Series,
          cycles: pd.DataFrame) -> dict:
+    """Headline numbers for a run: legs, aircraft, passengers, CO2, costs, fuel shares, capacity."""
     if result.status not in SOLVED:
         return {"status": result.status}
 

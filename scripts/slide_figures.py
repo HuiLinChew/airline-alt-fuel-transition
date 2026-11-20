@@ -12,17 +12,13 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib.colors import LinearSegmentedColormap
 
-from altfuel import analysis, plots
+from altfuel import analysis, plots, validation
 from altfuel.scenario_config import load_scenario
 from altfuel.utils import OUTPUT_DIR
 
 OUT = OUTPUT_DIR / "slides"
 
-GREY = "#9aa0a6"      # kerosene
-BLUE = "#5b9bd5"      # LH2
-GREEN = "#7dc383"     # LNG
-PURPLE = "#a88bd4"
-YELLOW = "#f2c14e"
+GREY, BLUE, GREEN, PURPLE, YELLOW = plots.COLOURS[:5]   # kerosene, LH2, LNG, then accents
 DARK = "#3c4043"
 LIGHT = "#e8eaed"
 BASES = LinearSegmentedColormap.from_list("bases", ["#ddd3f2", "#4b2a8a"])   # light to dark purple
@@ -35,18 +31,39 @@ plt.rcParams.update({
 
 
 def save(fig, name):
+    """Save a slide figure (white background, trimmed) and close it."""
     fig.savefig(OUT / f"{name}.png", dpi=200, bbox_inches="tight", facecolor="white")
     plt.close(fig)
 
 
+def fuel_shares(kpis):
+    """Percentage of flights on each fuel."""
+    return {"kerosene": kpis["share_kerosene"] * 100, "lng": kpis["share_ch4"] * 100,
+            "lh2": kpis["share_lh2"] * 100}
+
+
+def legend_outside(ax):
+    """Legend to the right of the plot, top entry first (as stacked from the bottom)."""
+    handles, labels = ax.get_legend_handles_labels()
+    ax.legend(handles[::-1], labels[::-1], loc="upper left", bbox_to_anchor=(1.01, 1), frameon=False)
+
+
 # ---------- Ryanair ----------
+
+def ryanair_run(name):
+    """A Ryanair scenario, with Ryanair's real aircraft count and the next-flight check."""
+    run = analysis.run(load_scenario(name))
+    real = validation.real_rotations(run)
+    run.real_aircraft = real.aircraft.nunique()
+    run.turns = validation.same_next_flight(run, real)
+    return run
+
 
 def ryanair_network(run):
     """Slide 1: every route the kept aircraft flew that day. Bubble area = aircraft that
-    start the day there (on the ground at 03:00 UTC)."""
+    start the day there (on the ground at 01:00 UTC)."""
     airports = run.data.airports
-    real = pd.read_csv(run.scenario.data_path / "real_rotations.csv").join(run.data.legs, on="leg_id")
-    based = real.sort_values("dep_min").groupby("icao24").origin.first().value_counts()
+    based = validation.aircraft_per_base(validation.real_rotations(run), "aircraft")
 
     fig, ax = plt.subplots(figsize=(10, 8))
     pairs = run.data.legs[["origin", "destination"]].drop_duplicates()
@@ -75,11 +92,11 @@ def ryanair_network(run):
     save(fig, "1_ryanair_network")
 
 
-def validation(one_day, four_days):
+def validation_figure(one_day, four_days):
     """Slide 7: aircraft needed, real vs model, and the forced next flights."""
     fig, (left, right) = plt.subplots(1, 2, figsize=(12, 4.8), gridspec_kw={"width_ratios": [1.1, 1]})
 
-    labels = ["1 day\n14 Sep 2022", "4 days\n14–17 Sep 2022"]
+    labels = ["1 day\n17 Sep 2025", "4 days\n17–20 Sep 2025"]
     real = [one_day.real_aircraft, four_days.real_aircraft]
     model = [one_day.kpis["aircraft"], four_days.kpis["aircraft"]]
     x = [0, 1]
@@ -107,10 +124,9 @@ def validation(one_day, four_days):
 
 def bases_scatter(one_day):
     """Backup: aircraft per night stop, real vs model."""
-    real = pd.read_csv(one_day.scenario.data_path / "real_rotations.csv").join(one_day.data.legs, on="leg_id")
-    real_based = real.sort_values("dep_min").groupby("icao24").origin.first().value_counts()
-    model_based = one_day.rotations.sort_values("dep_min").groupby("tail_id").origin.first().value_counts()
-    both = pd.DataFrame({"real": real_based, "model": model_based}).fillna(0)
+    real = validation.aircraft_per_base(validation.real_rotations(one_day), "aircraft")
+    model = validation.aircraft_per_base(one_day.rotations, "tail_id")
+    both = pd.DataFrame({"real": real, "model": model}).fillna(0)
 
     fig, ax = plt.subplots(figsize=(6, 6))
     top = both.max().max() + 3
@@ -123,6 +139,35 @@ def bases_scatter(one_day):
     save(fig, "backup_aircraft_per_base")
 
 
+def fuel_at_airports():
+    """Slide 8: the real Ryanair day at 200 $/t with LH2 and LNG sold only at the busiest
+    N airports (most Ryanair flights first); kerosene everywhere."""
+    base = load_scenario("ryanair_1d")
+    legs = pd.read_csv(base.data_path / "legs.csv")
+    busiest = list(pd.concat([legs.origin, legs.destination]).value_counts().index)
+    rows = []
+    for n in [5, 10, 20, 40, 80, len(busiest)]:
+        top = busiest[:n]
+        sc = replace(base, carbon_price=200, fleet={"KER-NB": 1000, "LH2-NB": 1000, "CH4-NB": 1000},
+                     fuel_max_tier={"lh2": 0, "ch4": 0}, fuel_stations={"lh2": top, "ch4": top})
+        rows.append({"airports": n, **fuel_shares(analysis.run(sc).kpis)})
+    sweep = pd.DataFrame(rows)
+    sweep.round(1).to_csv(OUT / "8_fuel_at_airports.csv", index=False)
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    x = range(len(sweep))
+    ax.bar(x, sweep.kerosene, color=GREY, label="Kerosene")
+    ax.bar(x, sweep.lng, bottom=sweep.kerosene, color=GREEN, label="LNG")
+    ax.bar(x, sweep.lh2, bottom=sweep.kerosene + sweep.lng, color=BLUE, label="LH₂")
+    names = [str(n) for n in sweep.airports[:-1]] + [f"All {sweep.airports.iloc[-1]}"]
+    ax.set_xticks(x, names)
+    ax.set_ylim(0, 100)
+    ax.set_xlabel("Airports selling LH₂ and LNG (busiest first)")
+    ax.set_ylabel("Flights (%)")
+    legend_outside(ax)
+    save(fig, "8_fuel_at_airports")
+
+
 # ---------- Fuels on the test network ----------
 
 # Out-and-back test network: LH2 at 2 airports, LNG at 3, kerosene at all 5
@@ -133,15 +178,15 @@ TIERED = replace(load_scenario("alt_carbon_200"), **TIERS)
 
 def carbon_sweep():
     """Fuel mix, CO2 and cost at each carbon price, against the all-kerosene baseline."""
-    def cost_of_flying(k):      # everything except the carbon price itself
+    def cost_of_flying(k):
+        """Fuel, crew, maintenance and aircraft: everything except the carbon price itself."""
         return k["operating_cost_usd"] - k["carbon_cost_usd"] + k["ownership_cost_usd"]
 
     baseline = analysis.run(load_scenario("baseline")).kpis
     rows = []
     for price in range(0, 401, 25):
         k = analysis.run(replace(TIERED, carbon_price=price)).kpis
-        rows.append({"price": price, "kerosene": k["share_kerosene"] * 100,
-                     "lng": k["share_ch4"] * 100, "lh2": k["share_lh2"] * 100,
+        rows.append({"price": price, **fuel_shares(k),
                      "co2_cut": 100 * (1 - k["co2_t"] / baseline["co2_t"]),
                      "cost_rise": 100 * (cost_of_flying(k) / cost_of_flying(baseline) - 1)})
     return pd.DataFrame(rows)
@@ -156,8 +201,7 @@ def fuel_mix(sweep):
     ax.set_ylim(0, 100)
     ax.set_xlabel("Carbon price ($ per tonne CO₂)")
     ax.set_ylabel("Flights (%)")
-    handles, names = ax.get_legend_handles_labels()
-    ax.legend(handles[::-1], names[::-1], loc="upper left", bbox_to_anchor=(1.01, 1), frameon=False)
+    legend_outside(ax)
     save(fig, "8_fuel_mix")
 
 
@@ -199,7 +243,8 @@ def retiming():
             ("No passengers aboard while refuelling", base.sequential_refuel, PURPLE, 2.5, "--")]:
         share = []
         for d in delays:
-            k = analysis.run(replace(base, sequential_refuel=rule, max_delay_min=d, delay_step_min=5)).kpis
+            sc = replace(base, sequential_refuel=rule, max_delay_min=d, delay_step_min=5)
+            k = analysis.run(sc).kpis
             share.append((k["share_lh2"] + k["share_ch4"]) * 100)
         ax.plot(delays, share, style, marker="o", lw=width, ms=width + 5, color=colour, label=name)
     ax.set_xticks(delays)
@@ -234,7 +279,8 @@ def time_space_network():
             ax.plot([arr, arr + turn], [stations[d]] * 2, color=YELLOW, lw=6, zorder=1)
         for (_, d, _, arr), (o, _, dep, _) in zip(flights, flights[1:]):
             ax.plot([arr + turn, dep], [stations[d]] * 2, color=colour, lw=2, ls=":", zorder=1)
-        ax.scatter([f[2] for f in flights], [stations[f[0]] for f in flights], s=40, color=colour, zorder=3)
+        departures = [(dep, stations[o]) for o, _, dep, _ in flights]
+        ax.scatter(*zip(*departures), s=40, color=colour, zorder=3)
 
     ax.plot([], [], color=BLUE, lw=2.5, label="Flight (aircraft 1)")
     ax.plot([], [], color=PURPLE, lw=2.5, label="Flight (aircraft 2)")
@@ -249,28 +295,13 @@ def time_space_network():
     save(fig, "6_time_space_network")
 
 
-def ryanair_run(name):
-    run = analysis.run(load_scenario(name))
-    real = pd.read_csv(run.scenario.data_path / "real_rotations.csv").join(run.data.legs, on="leg_id")
-    run.real_aircraft = real.icao24.nunique()
-
-    # Next flights: same as the real aircraft? alone = no other aircraft on the ground then
-    from compare_ryanair import connections, only_one_waiting
-    turns = connections(real, "icao24").reset_index(drop=True)
-    model_turns = set(zip(connections(run.rotations, "tail_id")["first"],
-                          connections(run.rotations, "tail_id")["then"]))
-    turns["same"] = [pair in model_turns for pair in zip(turns["first"], turns.then)]
-    turns["alone"] = only_one_waiting(turns, real)
-    run.turns = turns
-    return run
-
-
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)
     one_day, four_days = ryanair_run("ryanair_1d"), ryanair_run("ryanair_4d")
     ryanair_network(one_day)
-    validation(one_day, four_days)
+    validation_figure(one_day, four_days)
     bases_scatter(one_day)
+    fuel_at_airports()
     time_space_network()
     sweep = carbon_sweep()
     fuel_mix(sweep)

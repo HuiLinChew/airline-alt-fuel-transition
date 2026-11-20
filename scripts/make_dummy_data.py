@@ -15,8 +15,8 @@ fuels.csv is written by hand (constants and literature prices) in data/dummy/ an
 copied to the other folders. The irregular timetable is a stress test
 (scenarios/stress_tests/).
 
-The dummy schedule is invented: real timed schedules (ADS-B / OpenSky) will
-replace legs.csv later. Everything else traces to Henry's/Hasan's data or a paper.
+The dummy timetables are invented (the real one is Ryanair's, scripts/make_ryanair_data.py).
+Everything else traces to Henry's/Hasan's data or a paper.
 """
 
 import math
@@ -27,7 +27,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parents[1]
+from altfuel.utils import ROOT, read_csv
+
 OUT = ROOT / "data" / "dummy"
 OUT_CHAINS = ROOT / "data" / "dummy_chains"
 OUT_IRREGULAR = ROOT / "data" / "dummy_irregular"
@@ -48,7 +49,7 @@ LNG_PRICE_FACTOR = 1.09   # LNG premium = 75% of LH2's: Raab et al. 2024 Table 1
                           # (LCH4 +7.1%, LH2 +9.5% vs SAF), scaled to our LH2 +12%. Low case 1.071
 CREW_PER_BLOCK_HOUR = 940          # USD, same for all types (from Hoelzen et al. 2022 salaries)
 MAINT_PER_BLOCK_HOUR = 2060        # USD, kerosene. Placeholder: keeps crew + maintenance at 3,000
-LH2_MAINT_FACTOR = 1.0             # same as kerosene for now; Hoelzen et al. 2022 give +11% (short-range)
+LH2_MAINT_FACTOR = 1.0             # same as kerosene for now (Hoelzen et al. 2022: +11%, short range)
 CRUISE_KMH = 830          # same for all types: Hoelzen et al. 2025 design Mach 0.78 for both
                           # kerosene and LH2 single-aisle designs; also used to time the schedule
 CHAIN_TURN = 60           # minutes on the ground between legs in the chains timetable
@@ -95,12 +96,9 @@ CHAIN_CYCLES = {
 }
 
 
-def read(path):
-    return pd.read_csv(path, keep_default_na=False, na_values=[""])  # keep region "NA"
-
-
 def build_airports():
-    ap = read(RAW / "airport_all.csv")
+    """The five test airports from Hasan's airport table (no bases or curfews yet)."""
+    ap = read_csv(RAW / "airport_all.csv")
     ap = ap[ap.iata.isin(STATIONS)]
     return pd.DataFrame({
         "station": ap.iata, "name": ap.airport_name, "lat": ap.lat, "lon": ap.long,
@@ -112,7 +110,7 @@ def build_airports():
 
 def route_data():
     """Daily passengers for our airline and distance, per (origin, destination)."""
-    seg, ap = read(RAW / "segment_data.csv"), read(RAW / "airport_all.csv")
+    seg, ap = read_csv(RAW / "segment_data.csv"), read_csv(RAW / "airport_all.csv")
     iata = ap.set_index("airport_id").iata
     seg = seg.assign(o=seg.origin_id.map(iata), d=seg.destination_id.map(iata))
     seg = seg[seg.o.isin(STATIONS) & seg.d.isin(STATIONS)]
@@ -126,7 +124,33 @@ def to5(minutes):
     return int(round(minutes / 5) * 5)
 
 
+def block_min(km):
+    """Scheduled block time: cruise + 30 min, to the nearest 5 min."""
+    return to5(km / CRUISE_KMH * 60 + 30)
+
+
+def pax_per_leg(lines, pax):
+    """Each route's daily passengers split over its legs in these lines, capped at
+    seats x load factor so every leg can be flown (these timetables test rotations, not demand)."""
+    trips = [(a, b) for line in lines for a, b in zip(line, line[1:])]
+    max_pax = math.floor(SEATS * LOAD_FACTOR)
+    return {route: min(round(pax[route] / trips.count(route)), max_pax) for route in set(trips)}
+
+
+def line_legs(line, t, ground_min, leg_pax, km):
+    """The legs of one aircraft-day (a line of stations) from time t; between legs the
+    aircraft spends ground_min() minutes on the ground."""
+    rows = []
+    for a, b in zip(line, line[1:]):
+        block = block_min(km[a, b])
+        rows.append(dict(origin=a, destination=b, dep_min=t, arr_min=t + block,
+                         distance_km=round(km[a, b], 1), pax=leg_pax[a, b]))
+        t += block + ground_min()
+    return rows
+
+
 def number_legs(rows):
+    """Legs in departure order, numbered L000, L001 ..."""
     legs = pd.DataFrame(rows).sort_values(["dep_min", "origin"]).reset_index(drop=True)
     legs.insert(0, "leg_id", [f"L{i:03d}" for i in range(len(legs))])
     return legs
@@ -141,7 +165,7 @@ def build_legs():
     for o, d in sorted(pax):
         if o > d:          # handle each pair once, from its alphabetically first station
             continue
-        block = to5(km[o, d] / CRUISE_KMH * 60 + 30)              # cruise + 30 min
+        block = block_min(km[o, d])
         freq = math.ceil(max(pax[o, d], pax[d, o]) / (SEATS * LOAD_FACTOR))
         span = LAST_ARR - FIRST_DEP - 2 * block - 60               # room for out + 1 h + back
         for k in range(freq):
@@ -160,19 +184,10 @@ def build_chain_legs():
     factor so every leg can be flown (this timetable tests rotations, not demand)."""
     pax, km = route_data()
     lines = [line for cycle in CHAIN_CYCLES.values() for line in cycle]
-    trips = [(a, b) for line in lines for a, b in zip(line, line[1:])]
-    legs_per_route = {route: trips.count(route) for route in set(trips)}
-    max_pax = math.floor(SEATS * LOAD_FACTOR)
-
+    leg_pax = pax_per_leg(lines, pax)
     rows = []
     for i, line in enumerate(lines):
-        t = FIRST_DEP + 20 * i
-        for a, b in zip(line, line[1:]):
-            block = to5(km[a, b] / CRUISE_KMH * 60 + 30)
-            rows.append(dict(origin=a, destination=b, dep_min=t, arr_min=t + block,
-                             distance_km=round(km[a, b], 1),
-                             pax=min(round(pax[a, b] / legs_per_route[a, b]), max_pax)))
-            t += block + CHAIN_TURN
+        rows += line_legs(line, FIRST_DEP + 20 * i, lambda: CHAIN_TURN, leg_pax, km)
     return number_legs(rows)
 
 
@@ -186,7 +201,7 @@ def build_irregular_legs():
     rng = np.random.default_rng(SEED)
     rows = []
     for o, d in sorted(pax):
-        block = to5(km[o, d] / CRUISE_KMH * 60 + 30)
+        block = block_min(km[o, d])
         freq = math.ceil(max(pax[o, d], pax[d, o]) / (SEATS * TYPICAL_LOAD_FACTOR))
         for t in sorted(rng.uniform(360, 1380 - block, freq)):   # leave from 06:00, land by 23:00
             dep = to5(t)
@@ -203,19 +218,16 @@ def build_lcc_legs(days=1, skip={}):
     same day is repeated, leaving out the lines in skip[day] (fewer flights at the weekend)."""
     pax, km = route_data()
     rng = np.random.default_rng(SEED)
-    trips = [(a, b) for line in LCC_LINES for a, b in zip(line, line[1:])]
-    legs_per_route = {route: trips.count(route) for route in set(trips)}
-    max_pax = math.floor(SEATS * LOAD_FACTOR)
+    leg_pax = pax_per_leg(LCC_LINES, pax)
+
+    def ground_min():
+        """Turn + a random buffer, so the timetable just works for kerosene."""
+        return LCC_TURN + to5(rng.uniform(*LCC_BUFFER))
 
     one_day = []          # (line number, leg) for one day
     for i, line in enumerate(LCC_LINES):
-        t = to5(rng.uniform(360, 420))
-        for a, b in zip(line, line[1:]):
-            block = to5(km[a, b] / CRUISE_KMH * 60 + 30)
-            one_day.append((i, dict(origin=a, destination=b, dep_min=t, arr_min=t + block,
-                                    distance_km=round(km[a, b], 1),
-                                    pax=min(round(pax[a, b] / legs_per_route[a, b]), max_pax))))
-            t += block + LCC_TURN + to5(rng.uniform(*LCC_BUFFER))
+        start = to5(rng.uniform(360, 420))
+        one_day += [(i, leg) for leg in line_legs(line, start, ground_min, leg_pax, km)]
 
     rows = []
     for day in range(days):
@@ -233,7 +245,7 @@ def build_aircraft_types():
     Refuel pumps: narrowbody = 2 (Al-Timimi, after FlyZero). Crew cost is the same for
     all types; maintenance is a placeholder base, also the same for all types for now.
     A type can instead use a burn-vs-distance table in fuel_burn.csv (see README)."""
-    curves = read(RAW / "aircraft_data.csv")
+    curves = read_csv(RAW / "aircraft_data.csv")
     curves = curves[curves.range_km <= 3000]
     fit = {c: np.polyfit(curves.range_km, curves[c], 1) for c in ["ker_sh", "lh2_sh"]}
     ker_per_km, ker_fixed = fit["ker_sh"]

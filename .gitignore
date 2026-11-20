@@ -5,3 +5,9 @@ __pycache__/
 .DS_Store
 data/ryanair_*/
 outputs/one/
+# Ryanair per-flight outputs: flight-by-flight copies of EUROCONTROL data (may not be
+# shared), and Gantt charts too big to read. Summaries and maps are kept.
+outputs/ryanair/assign_*.csv
+outputs/ryanair/rotations_*.csv
+outputs/ryanair/cycles_*.csv
+outputs/ryanair/figures/gantt_*.png

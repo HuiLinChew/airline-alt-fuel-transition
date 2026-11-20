@@ -10,5 +10,6 @@ OUTPUT_DIR = ROOT / "outputs"
 
 
 def read_csv(path) -> pd.DataFrame:
+    """pandas read_csv, but text like "NA" stays text: only empty cells count as missing."""
     # Keep the region code "NA" (North America) as text instead of a missing value
     return pd.read_csv(path, keep_default_na=False, na_values=[""])

@@ -1,5 +1,5 @@
-# One real day of Ryanair flying (OpenSky, 14 Sep 2022), kerosene only.
-# Build the data first: uv run scripts/make_ryanair_data.py <flight list> 2022-09-14 1
+# One real day of Ryanair flying (EUROCONTROL, 17 Sep 2025), kerosene only.
+# Build the data first: uv run scripts/make_ryanair_data.py <Flights file> 2025-09-17 1
 name: ryanair_1d
 description: Real Ryanair day (aircraft whose whole day is known), kerosene only, nights at a night stop
 data_dir: data/ryanair_1d

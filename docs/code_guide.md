@@ -5,7 +5,8 @@ What each file does, how they connect, and how the optimiser works.
 ## How it fits together
 
 ```
-scripts/make_dummy_data.py  ->  data/dummy*/   (four timetables, run once)
+scripts/make_dummy_data.py   ->  data/dummy*/     (five test timetables, run once)
+scripts/make_ryanair_data.py ->  data/ryanair_*/  (real Ryanair days, from EUROCONTROL)
 
 scenarios/<timetable>/*.yaml  ->  scenario_config
 data/dummy/*.csv  ->  data_layer
@@ -17,6 +18,7 @@ data/dummy/*.csv  ->  data_layer
         optimiser              which type flies each leg
         rotation_checker       individual aircraft rotations
         analysis, plots        KPIs, comparison with the baseline, sweeps, figures
+        validation             the model's rotations vs a real airline's (Ryanair)
 ```
 
 `analysis.run(scenario)` runs the whole chain for one scenario.
@@ -61,6 +63,7 @@ and 1 fewer on Sunday. Each scenario is compared with the first scenario on the 
 | `optimiser.py` | 7 | The fleet assignment model |
 | `rotation_checker.py` | 8 | Builds aircraft rotations from the assignment and flags problems |
 | `analysis.py`, `plots.py` | 9 | Runs the chain, KPIs, comparison with the baseline, sweeps, figures |
+| `validation.py` | 10 | Compares the model's rotations with Ryanair's real ones: aircraft per base, and whether each aircraft flies the same next flight |
 
 Module 4 (fleet stock-flow) isn't built yet: for now the scenario just says how many aircraft of each type are available.
 
@@ -70,8 +73,9 @@ Module 4 (fleet stock-flow) isn't built yet: for now the scenario just says how 
 | `scripts/make_dummy_data.py` | Builds the dummy airports, legs and aircraft types from Hasan's raw data |
 | `scripts/run_scenarios.py` | Runs every scenario and saves results and figures |
 | `scripts/run_one.py` | Runs one scenario, prints its results, saves its map and schedule |
-| `scripts/make_ryanair_data.py` | Cleans a month of OpenSky flights (`data/ryanair/flights_clean.csv`) and builds the model inputs for a stretch of real Ryanair days; not in git |
+| `scripts/make_ryanair_data.py` | Cleans a month of EUROCONTROL flights (`data/ryanair_<days>d/flights_clean.csv`) and builds the model inputs for a stretch of real Ryanair days; not in git |
 | `scripts/compare_ryanair.py` | Model vs what Ryanair really flew: aircraft, flights and block hours per aircraft, aircraft per base, and how often the model's aircraft fly the same next flight |
+| `scripts/slide_figures.py` | Figures for the Michaelmas slides (`outputs/slides/`): Ryanair network and validation, fuel at airports, fuel mix, re-timing, time-space diagram |
 | `tests/test_model.py` | `uv run pytest`. Basic behaviour, input checks, and checks that the answers are physically right (shifting the timetable, a repeated week, brute force on a small network) |
 
 ## Scenario settings

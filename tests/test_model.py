@@ -449,3 +449,20 @@ def test_one_off_period_lets_aircraft_end_anywhere(data):
     assert analysis.run(sc, one_leg).kpis["status"] not in analysis.SOLVED
     r = analysis.run(replace(sc, repeat=False), one_leg)
     assert r.kpis["aircraft"] == 1 and r.violations == []
+
+
+# Comparison with a real airline
+
+def test_turns_are_forced_only_with_one_aircraft_waiting():
+    """A lands at STN and flies on to MAD; B lands at STN while A is still there and flies
+    on to PMI. Both turns overlap, so neither aircraft's next flight is forced. C turns
+    alone at DUB, so its next flight is forced."""
+    from altfuel.validation import connections, only_one_waiting
+    real = pd.DataFrame({"aircraft": ["A", "A", "B", "B", "C", "C"],
+                         "leg_id": ["1", "2", "3", "4", "5", "6"],
+                         "origin": ["DUB", "STN", "BGY", "STN", "MAD", "DUB"],
+                         "destination": ["STN", "MAD", "STN", "PMI", "DUB", "MAD"],
+                         "dep_min": [0, 120, 10, 130, 0, 200], "arr_min": [60, 200, 70, 210, 150, 350]})
+    turns = connections(real, "aircraft")
+    assert list(zip(turns["first"], turns.then)) == [("1", "2"), ("3", "4"), ("5", "6")]
+    assert only_one_waiting(turns, real) == [False, False, True]

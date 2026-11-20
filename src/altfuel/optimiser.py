@@ -44,6 +44,7 @@ class Result:
 
 def solve(net: Network, perf: pd.DataFrame, drop_cost: pd.Series, ownership: pd.Series,
           capacity: pd.DataFrame, sc: Scenario) -> Result:
+    """Build the model above, solve it, and read off each leg's type and the aircraft needed."""
     F = net.flights
     if not sc.allow_drop:
         check_every_leg_can_fly(F, perf, drop_cost.index)
@@ -69,6 +70,13 @@ def solve(net: Network, perf: pd.DataFrame, drop_cost: pd.Series, ownership: pd.
         for k, s in net.nodes:
             start[k, s] = pulp.LpVariable(f"start_{k}_{s}", lowBound=0, cat="Integer")
 
+    def overnight(k, s):
+        """Aircraft on the ground at station s overnight: the ground arc that wraps from the
+        last node to the first, or, if the period doesn't repeat, those there at the start."""
+        if sc.repeat:
+            return g[k, s, len(net.nodes[k, s]) - 1]
+        return start[k, s]
+
     # Group the flight variables by leg and by the node they leave or reach
     by_leg = defaultdict(list)
     leaving = defaultdict(list)
@@ -83,15 +91,11 @@ def solve(net: Network, perf: pd.DataFrame, drop_cost: pd.Series, ownership: pd.
     for leg in y:
         model += pulp.lpSum(by_leg[leg]) + y[leg] == 1, f"cover_{leg}"
 
-    # Balance. g[k,s,i] is the ground arc from node i to node i+1; the last one wraps to
-    # node 0 (or, if the period doesn't repeat, node 0 starts with the aircraft there at the start).
+    # Balance. g[k,s,i] is the ground arc from node i to node i+1; the overnight arc
+    # leads into node 0.
     for (k, s), times in net.nodes.items():
-        n = len(times)
-        for i in range(n):
-            if i > 0:
-                before = g[k, s, i - 1]
-            else:
-                before = g[k, s, n - 1] if sc.repeat else start[k, s]
+        for i in range(len(times)):
+            before = g[k, s, i - 1] if i > 0 else overnight(k, s)
             arriving = pulp.lpSum(reaching[k, s, i]) + before
             departing = pulp.lpSum(leaving[k, s, i]) + g[k, s, i]
             model += arriving == departing, f"balance_{k}_{s}_{i}"
@@ -99,10 +103,7 @@ def solve(net: Network, perf: pd.DataFrame, drop_cost: pd.Series, ownership: pd.
     # Count
     fleet_used = {}
     for k in F.type.unique():
-        if sc.repeat:
-            on_ground = [g[k, s, len(times) - 1] for (kk, s), times in net.nodes.items() if kk == k]
-        else:
-            on_ground = [start[kk, s] for kk, s in start if kk == k]
+        on_ground = [overnight(kk, s) for kk, s in net.nodes if kk == k]
         in_air = [x[k, r.leg_id] for r in F[(F.type == k) & F.crosses].itertuples()]
         fleet_used[k] = pulp.lpSum(on_ground + in_air)
         model += fleet_used[k] <= sc.fleet.get(k, 0), f"count_{k}"
@@ -117,10 +118,7 @@ def solve(net: Network, perf: pd.DataFrame, drop_cost: pd.Series, ownership: pd.
                 if s not in net.bases:
                     # the ground arc from the last node before midnight (or the overnight arc)
                     before = [i for i, t in enumerate(times) if t < midnight]
-                    if before:
-                        arc = g[k, s, before[-1]]
-                    else:
-                        arc = g[k, s, len(times) - 1] if sc.repeat else start[k, s]
+                    arc = g[k, s, before[-1]] if before else overnight(k, s)
                     model += arc == 0, f"no_night_{midnight}_{k}_{s}"
             for r in F[~F.destination.isin(net.bases)].itertuples():
                 if busy_at(midnight, r):
@@ -185,6 +183,7 @@ def solve(net: Network, perf: pd.DataFrame, drop_cost: pd.Series, ownership: pd.
 
 
 def run_solver(model, sc: Scenario) -> str:
+    """Solve with HiGHS. Running out of time with a solution in hand still counts as solved."""
     model.solve(pulp.HiGHS(msg=sc.solver.get("msg", False),
                            timeLimit=sc.solver.get("time_limit_s", 60),
                            gapRel=sc.solver.get("mip_gap", 0.0)))

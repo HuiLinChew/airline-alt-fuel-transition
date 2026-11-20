@@ -19,10 +19,10 @@ Close and reopen the terminal after installing uv. To get the latest code later:
 
 | What | Command | Where the results go |
 |---|---|---|
-| Check the model works (about 10 s) | `uv run pytest` | prints `39 passed` |
+| Check the model works (about 10 s) | `uv run pytest` | prints `41 passed` |
 | Run one scenario | `uv run scripts/run_one.py lcc_carbon_200` | prints the results; map and schedule in `outputs/one/` |
 | Run every scenario | `uv run scripts/run_scenarios.py` | `outputs/<folder>/` and `outputs/scenario_summary.csv` |
-| Presentation figures (a few minutes) | `uv run scripts/presentation_figures.py` | `outputs/presentation/` |
+| Slide figures (a few minutes; needs the Ryanair data, section 4) | `uv run scripts/slide_figures.py` | `outputs/slides/` |
 
 ## 3. Trying your own scenario
 
@@ -33,21 +33,22 @@ Close and reopen the terminal after installing uv. To get the latest code later:
    `docs/code_guide.md` (Scenario settings).
 3. `uv run scripts/run_one.py my_test`
 
-## 4. The Ryanair day (real data)
+## 4. The Ryanair days (real data)
 
-1. Download a month of flights from <https://zenodo.org/records/7923702>, e.g.
-   `flightlist_20220901_20220930.csv.gz` (about 200 MB). If the page times out, try the
-   direct link `https://zenodo.org/records/7923702/files/flightlist_20220901_20220930.csv.gz?download=1`
-   or try again later.
-2. Build the inputs (takes about a minute): file, first day, number of days
-   `uv run scripts/make_ryanair_data.py path/to/flightlist_20220901_20220930.csv.gz 2022-09-14 1`
-   This writes `data/ryanair/` (not in git: the data's licence is non-commercial), including
-   the whole cleaned month as `flights_clean.csv`. Any date in that month works. For more than
-   one day, set `period_min` in `scenarios/ryanair/ryanair_baseline.yaml` to 1440 × days.
+1. Log in to EUROCONTROL's Aviation Data Repository for Research
+   (<https://ext.eurocontrol.int/prisme_data_provision_hmi/>) and download the **Flights** file
+   for a month, e.g. `Flights_20250901_20250930.csv` (about 200 MB). The other files
+   (trajectory points, airspace) aren't needed. The data may not be shared: keep it out of git.
+2. Build the inputs (a minute or two): file, first day, number of days
+   `uv run scripts/make_ryanair_data.py path/to/Flights_20250901_20250930.csv 2025-09-17 1`
+   This writes `data/ryanair_1d/` (or `_4d`, `_7d` for 4 or 7 days), including the whole
+   cleaned month as `flights_clean.csv`. Any date in that month works. There are scenarios for
+   1, 4 and 7 days (`scenarios/ryanair/ryanair_1d.yaml` etc.); for another number of days,
+   copy one and set `data_dir` and `period_min` (1440 × days).
 3. Compare the model with what Ryanair really flew:
-   `uv run scripts/compare_ryanair.py` (table printed; `outputs/ryanair/`).
-4. Run it like any other scenario: `uv run scripts/run_one.py ryanair_baseline`.
-   To try fuels on it, copy `scenarios/ryanair/ryanair_baseline.yaml` and add, for example,
+   `uv run scripts/compare_ryanair.py ryanair_1d` (table printed; `outputs/ryanair/`).
+4. Run it like any other scenario: `uv run scripts/run_one.py ryanair_1d`.
+   To try fuels on it, copy `scenarios/ryanair/ryanair_1d.yaml` and add, for example,
    `carbon_price: 200`, `fleet: {KER-NB: 1000, LH2-NB: 1000, CH4-NB: 1000}` and
    `fuel_stations: {lh2: [STN, DUB, BGY]}`.
 
@@ -58,4 +59,4 @@ Close and reopen the terminal after installing uv. To get the latest code later:
 | `uv` not recognised | Close and reopen the terminal after installing uv |
 | `IndexError` from `load_scenario` | No scenario file with that name: check the `name` and file name match |
 | `Infeasible` | No way to fly every leg with these settings. Try `allow_drop: true` to see which legs cause it |
-| `skipped: no data/ryanair/` | Run step 4.2 first |
+| `skipped: no data/ryanair_1d/` | Run step 4.2 first |

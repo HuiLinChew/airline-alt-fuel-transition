@@ -17,6 +17,7 @@ from .scenario_config import DEFAULT_OWNERSHIP, Scenario
 
 def add_costs(perf: pd.DataFrame, data: Data, airport_fuel: pd.DataFrame,
               sc: Scenario) -> pd.DataFrame:
+    """Add the costs of each (type, leg) to perf, and `c`, the number the optimiser minimises."""
     p = perf.copy()
     types = p.index.get_level_values("type")
     leg_ids = p.index.get_level_values("leg_id")
@@ -48,6 +49,7 @@ def add_costs(perf: pd.DataFrame, data: Data, airport_fuel: pd.DataFrame,
 
 
 def fare_per_pax(data: Data, sc: Scenario) -> pd.Series:
+    """Fare per passenger on each leg: legs.csv's fare_usd if given, else distance x yield."""
     legs = data.legs
     if "fare_usd" in legs:
         return legs.fare_usd

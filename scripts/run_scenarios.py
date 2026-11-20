@@ -15,11 +15,13 @@ from altfuel.utils import OUTPUT_DIR
 
 
 def save(fig, path):
+    """Save a figure and close it (many figures open at once use a lot of memory)."""
     fig.savefig(path, dpi=180)
     plt.close(fig)
 
 
 def main():
+    """Run every scenario, save its tables and figures, then compare each folder's runs."""
     runs, groups = [], {}
     for path in scenario_files():
         sc = load_scenario(path)

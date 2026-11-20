@@ -42,7 +42,7 @@ class Scenario:
 
     # Costs and emissions
     carbon_price: float = 0.0                # USD per tonne of CO2 burnt
-    wtt_co2_kg_per_kg: dict = field(default_factory=dict)   # well-to-tank CO2; unlisted fuels use fuels.csv
+    wtt_co2_kg_per_kg: dict = field(default_factory=dict)   # well-to-tank CO2 (else fuels.csv)
     ownership: dict = field(default_factory=dict)           # changes to DEFAULT_OWNERSHIP
     yield_usd_per_pax_km: float = 0.148      # fare, if legs.csv has no fare_usd column
 
@@ -77,10 +77,12 @@ class Scenario:
 
     @property
     def data_path(self) -> Path:
+        """Absolute path of the scenario's data folder."""
         return ROOT / self.data_dir
 
 
 def load_scenario(name_or_path) -> Scenario:
+    """A scenario by name (looked up in any scenarios/ folder) or by the path of its YAML file."""
     path = Path(name_or_path)
     if not path.suffix:
         path = list(SCENARIO_DIR.rglob(f"{name_or_path}.yaml"))[0]   # in any folder
@@ -105,6 +107,7 @@ def validate(sc: Scenario, data) -> None:
     errors = []
 
     def check(name, given, allowed):
+        """Note any names in `given` that aren't in `allowed`."""
         bad = set(given) - set(allowed)
         if bad:
             errors.append(f"{name}: {sorted(bad)} not in {sorted(allowed)}")

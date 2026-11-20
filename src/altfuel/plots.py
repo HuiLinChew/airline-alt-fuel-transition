@@ -14,7 +14,8 @@ from matplotlib.patches import FancyArrowPatch, Patch, Polygon
 
 from .utils import ROOT
 
-COLOURS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
+# Soft colours, one per fuel in fuels.csv order: kerosene grey, LH2 blue, LNG green, e-methane purple
+COLOURS = ["#9aa0a6", "#5b9bd5", "#7dc383", "#a88bd4", "#f2c14e", "#e88fb0", "#4fb3bf", "#f0a35e"]
 BLACK, GREY, LIGHT_GREY, BACKGROUND = "#0b0b0b", "#52514e", "#e4e3df", "#fcfcfb"
 LAND, BORDER = "#efeee9", "#d3d1cb"
 LAND_FILE = ROOT / "data" / "europe_outline.geojson"   # coastlines and borders (GSHHG)
@@ -64,34 +65,37 @@ def network_map(run, background=True):
     flown["pair"] = [tuple(sorted(p)) for p in zip(flown.origin, flown.destination)]
 
     days = run.scenario.period_min // 1440
+    big = len(airports) > 20    # e.g. the Ryanair network: no labels or numbers, thinner lines
+    thin = 0.4 if big else 1
     fig, ax = plt.subplots(figsize=(8.5, 6))
     lines = []
     for (pair, fuel), n in flown.groupby(["pair", "fuel"]).size().items():
         start = airports.loc[pair[0], ["lon", "lat"]].to_numpy()
         end = airports.loc[pair[1], ["lon", "lat"]].to_numpy()
         bend = 0.08 + 0.12 * fuels.index(fuel)     # so two fuels on one route don't overlap
-        width = 0.6 + 0.45 * n / days              # by legs per day, so a week looks like a day
+        width = thin * (0.6 + 0.45 * n / days)             # by legs per day, so a week looks like a day
         ax.add_patch(FancyArrowPatch(start, end, arrowstyle="-", color=colour[fuel], lw=width,
                                      connectionstyle=f"arc3,rad={bend}"))
         lines.append((start, end, bend, fuel, n))
-    ax.scatter(airports.lon, airports.lat, s=90, c=BACKGROUND, edgecolors=BLACK, lw=1.5, zorder=3)
+    ax.scatter(airports.lon, airports.lat, s=15 if big else 90, c=BACKGROUND, edgecolors=BLACK, lw=1.5, zorder=3)
 
     # Label each airport with its tier and the fuels it offers (except fuels offered
     # everywhere), on the side facing away from the middle of the network, where there
     # are fewest lines. LABEL_DIRECTION overrides this for airports in the middle.
     everywhere = [f for f in fuels if run.airport_fuel.xs(f, level="fuel").available.all()]
     middle = airports[["lon", "lat"]].mean().to_numpy()
-    for station, airport in airports.iterrows():
-        offered = [label[f] for f in fuels
-                   if f not in everywhere and run.airport_fuel.loc[(station, f), "available"]]
-        point = (airport.lon, airport.lat)
-        away = np.array(LABEL_DIRECTION.get(station, point - middle), dtype=float)
-        away = away / np.hypot(*away)
-        ha = "center" if abs(away[0]) < 0.4 else ("left" if away[0] > 0 else "right")
-        va = "bottom" if away[1] >= 0 else "top"
-        text = f"{station} (tier {airport.tier})\n{' · '.join(offered)}"
-        ax.annotate(text, point, xytext=14 * away, textcoords="offset points", fontsize=8.5,
-                    zorder=6, ha=ha, va=va, linespacing=1.1)
+    if not big:
+        for station, airport in airports.iterrows():
+            offered = [label[f] for f in fuels
+                       if f not in everywhere and run.airport_fuel.loc[(station, f), "available"]]
+            point = (airport.lon, airport.lat)
+            away = np.array(LABEL_DIRECTION.get(station, point - middle), dtype=float)
+            away = away / np.hypot(*away)
+            ha = "center" if abs(away[0]) < 0.4 else ("left" if away[0] > 0 else "right")
+            va = "bottom" if away[1] >= 0 else "top"
+            text = f"{station} (tier {airport.tier})\n{' · '.join(offered)}"
+            ax.annotate(text, point, xytext=14 * away, textcoords="offset points", fontsize=8.5,
+                        zorder=6, ha=ha, va=va, linespacing=1.1)
 
     # Frame the airports with some space around them, then put the map underneath
     lon, lat = airports.lon, airports.lat
@@ -114,7 +118,8 @@ def network_map(run, background=True):
 
     used = set(flown.fuel)
     handles = [Line2D([], [], color=colour[f], lw=3, label=label[f]) for f in fuels if f in used]
-    handles += [Line2D([], [], color=GREY, lw=0.6 + 0.45 * n, label=f"{n} legs a day") for n in (2, 6)]
+    handles += [Line2D([], [], color=GREY, lw=thin * (0.6 + 0.45 * n),
+                        label=f"{n} legs a day") for n in (2, 6)]
     ax.legend(handles=handles, loc="lower left", bbox_to_anchor=(1.04, 0), frameon=False,
               fontsize=8.5)
 
@@ -123,10 +128,15 @@ def network_map(run, background=True):
                  loc="left", fontsize=11, pad=30)
     note = f" (offered everywhere: {', '.join(label[f] for f in everywhere)})" if everywhere else ""
     period = {1: "day", 7: "week"}.get(days, f"{days} days")
-    ax.text(0, 1.015, f"Numbers: legs per {period} on each line, both directions\n"
-                      f"Labels: airport tier and fuels offered{note}",
-            transform=ax.transAxes, fontsize=8, color=GREY, va="bottom")
+    if big:
+        note = f"{len(airports)} airports, {airports.base.sum()} of them bases"
+    else:
+        note = (f"Numbers: legs per {period} on each line, both directions\n"
+                f"Labels: airport tier and fuels offered{note}")
+    ax.text(0, 1.015, note, transform=ax.transAxes, fontsize=8, color=GREY, va="bottom")
     fig.tight_layout()
+    if big:
+        return fig
 
     # Number of legs on each line, placed on its curve. The curves are bent in screen
     # space, so positions are worked out there once the layout is final. Each fuel's

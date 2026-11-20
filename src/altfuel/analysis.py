@@ -49,10 +49,10 @@ def run(sc: Scenario, data: Data = None) -> Run:
     drop = cost_revenue.drop_cost(data, sc)
     ownership = cost_revenue.ownership_per_day(data, sc)
 
-    net = network_builder.build_network(data, perf, sc.period_min)
+    net = network_builder.build_network(data, perf, sc.period_min, sc.repeat)
     result = optimiser.solve(net, perf, drop, ownership, capacity, sc)
     rotations, violations = rotation_checker.build_rotations(data, perf, result.assign,
-                                                             result.fleet_used)
+                                                             result.fleet_used, sc.repeat)
     cycles = rotation_checker.day_cycles(rotations, sc.period_min)
 
     flown = perf.reset_index().merge(result.assign.reset_index(), on=["leg_id", "type"])

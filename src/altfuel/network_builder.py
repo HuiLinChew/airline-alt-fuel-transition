@@ -9,7 +9,8 @@ the node lists.
 
 The schedule repeats every period. A flight that is still flying or turning at
 the end of the period is marked `crosses`; its ready node goes at
-(ready time - period).
+(ready time - period). With repeat=False the period is a one-off: nothing wraps, and
+ready times after the end of the period stay where they are.
 """
 
 from dataclasses import dataclass, field
@@ -27,7 +28,7 @@ class Network:
     bases: list = field(default_factory=list)   # stations where aircraft are based
 
 
-def build_network(data: Data, perf: pd.DataFrame, period_min: int) -> Network:
+def build_network(data: Data, perf: pd.DataFrame, period_min: int, repeat=True) -> Network:
     f = perf[perf.feasible].reset_index()
     legs = data.legs.loc[f.leg_id]
     f["origin"] = legs.origin.to_numpy()
@@ -40,9 +41,14 @@ def build_network(data: Data, perf: pd.DataFrame, period_min: int) -> Network:
     if (dep >= period_min).any() or (ready - dep > period_min).any():
         raise ValueError("a leg departs after the period ends, or takes longer than a period")
     f["dep_t"] = dep
-    f["arr_t"] = f.arr_min % period_min
-    f["ready_t"] = ready % period_min
-    f["crosses"] = ready >= period_min
+    if repeat:
+        f["arr_t"] = f.arr_min % period_min
+        f["ready_t"] = ready % period_min
+        f["crosses"] = ready >= period_min
+    else:
+        f["arr_t"] = f.arr_min
+        f["ready_t"] = ready
+        f["crosses"] = False
 
     net = Network(period_min, bases=list(data.airports.index[data.airports.base == 1]))
     for ac_type, flights in f.groupby("type"):

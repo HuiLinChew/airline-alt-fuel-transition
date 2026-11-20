@@ -68,6 +68,10 @@ class Scenario:
     overnight_at_bases: bool = False
 
     period_min: int = 1440                   # 1440 = one day, 10080 = one week
+    # True: the period repeats (the last night joins the first morning). False: a one-off
+    # stretch of days, e.g. 4 real days: aircraft start and end it anywhere, but every
+    # night in between has to work (and be at a base, with overnight_at_bases).
+    repeat: bool = True
     solver: dict = field(default_factory=lambda: {"time_limit_s": 60, "mip_gap": 0.0})
     sweep: dict = field(default_factory=dict)  # {parameter: ..., values: [...]}
 

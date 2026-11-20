@@ -3,11 +3,40 @@
 Ideas and to-dos not built yet, roughly in priority order. Sources for anything already
 built are in `methods.md`.
 
+## Priorities after the 12 Nov 2026 meeting (Maria, Peter)
+
+The project has three parts, also the three parts of the presentation: **network** (which
+aircraft fly which routes; built), **schedule** (built in part) and **fleet turnover** (the
+end-of-year goal, not for this presentation). Tankering is unlikely to be built.
+
+| Priority | What | When |
+|---|---|---|
+| 1 | **Validate against Ryanair:** a real Ryanair-like network and schedule, and check the model's kerosene baseline looks like what Ryanair does. Schedule data from OpenSky / EUROCONTROL (research access); check a site's terms before scraping | Next term (start over Christmas if data arrives) |
+| 2 | **Flip the model: fleet in, schedule out.** Given the aircraft an airline has, output a realistic, cost-saving or profit-maximising schedule. Partly possible now (candidate flights + fleet limit + `allow_drop` + re-timing = which flights to fly and when, for most profit); a full version needs passengers per route and candidate departure times (schedule step 2 above) | Next term |
+| 3 | **Fleet turnover** (stock model, below): the end-of-year goal | Lent–Easter |
+| 4 | Ask Anil how airlines plan schedules and fleets (meeting over Christmas) | Christmas |
+
+Presentation: the main research question big and bold; then "as a first step, this is what I
+did in Michaelmas"; a future-work slide (Gantt chart of the plan). TMR due Wednesday of week 0.
+Answer for "which route would LH₂ serve if only one aircraft is introduced": the Madrid–London
+shuttle (longest route between two hydrogen airports), in every case tested.
+
+### Added 18–20 Nov (after the Ryanair validation)
+- **EUROCONTROL flights file** (access granted 20 Nov): rebuild the Ryanair network from it
+  (real gate times, airports and aircraft types on every flight); aim for ~100% of aircraft.
+- **Aircraft-type test**: give the model Ryanair's real mix (737-800, 737 MAX 8-200, A320) and
+  check it puts each type on the same flights. Needs per-type fuel burn (OpenAP has B738, B38M,
+  A320) and each type restricted to its real bases. Validates the fleet assignment itself.
+- Other checks: a winter day (Dec 2022), a second airline (easyJet, mixed fleet), Ryanair's
+  published utilisation and average flight length.
+- **Fuel at airports on the real network**: % of flights switching vs number of airports with
+  new fuel (first runs: 20 busiest → 11%, 80 → 45%). Candidate main results figure.
+
 ## Model
 
 | Item | What | Notes |
 |---|---|---|
-| Tankering + boil-off (chosen: fuel bands) | Time-space-fuel network (Randeraad et al.): each node also has a fuel state = range left on board, in bands (e.g. 0, 500, 1,000 … km; band size a scenario setting). A flight moves the aircraft from band s to s − its distance, rounded down to be safe; at an airport with the fuel it can refuel to any band up to full; at one without it can only use what's on board | Replaces "fuel at origin" (refuel before every departure). Checks distance exactly (to band size) for any chain of legs, so multi-leg tankering comes for free. Cost: extra fuel burnt to carry fuel (rule of thumb for kerosene ~2.5–4% of carried fuel per flight hour; LH₂ value to source, maybe Maria's data). Boil-off default: no fuel held overnight (wrap-round ground arcs only in the empty band), so LH₂ aircraft end the day at LH₂ airports; optimistic case (held overnight) as a setting. In-day `max_hold_min` unlimited until sourced. Size: × number of bands (LH₂ 2,778 km at 500 km ≈ 6), roughly 10–30 s at 2,000 legs. Mostly a network_builder change; the optimiser gets one balance constraint per band. Rejected: a 2-state "fuel for one more leg" version, which can't tell a short next leg from a long one |
+| Tankering + boil-off (chosen: fuel bands; unlikely to be built, 12 Nov) | Time-space-fuel network (Randeraad et al.): each node also has a fuel state = range left on board, in bands (e.g. 0, 500, 1,000 … km; band size a scenario setting). A flight moves the aircraft from band s to s − its distance, rounded down to be safe; at an airport with the fuel it can refuel to any band up to full; at one without it can only use what's on board | Replaces "fuel at origin" (refuel before every departure). Checks distance exactly (to band size) for any chain of legs, so multi-leg tankering comes for free. Cost: extra fuel burnt to carry fuel (rule of thumb for kerosene ~2.5–4% of carried fuel per flight hour; LH₂ value to source, maybe Maria's data). Boil-off default: no fuel held overnight (wrap-round ground arcs only in the empty band), so LH₂ aircraft end the day at LH₂ airports; optimistic case (held overnight) as a setting. In-day `max_hold_min` unlimited until sourced. Size: × number of bands (LH₂ 2,778 km at 500 km ≈ 6), roughly 10–30 s at 2,000 legs. Mostly a network_builder change; the optimiser gets one balance constraint per band. Rejected: a 2-state "fuel for one more leg" version, which can't tell a short next leg from a long one |
 | Fleet stock-flow (module 4) | Fleet changes year by year (retirements, deliveries) instead of a fixed fleet per scenario | Rau, Dray, Sirtori, Oesingmann. Ownership would then be charged on the whole owned fleet |
 | Maintenance base | Source the kerosene maintenance cost per block hour (now a 2,060 $/h placeholder) and the methane difference | Split from crew is done (crew 940 $/h); maintenance is the same for all types for now. To apply: LH₂ +11% (Hoelzen et al. 2022) via `LH2_MAINT_FACTOR`, which moves LH₂'s entry from 200 to 250 $/t. A320-class engineering cost studies should give the base |
 | Spill recapture | Spilled passengers rebook onto other flights | Currently all lost, which overstates spill cost |

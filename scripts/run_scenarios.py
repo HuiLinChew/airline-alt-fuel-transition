@@ -23,6 +23,9 @@ def main():
     runs, groups = [], {}
     for path in scenario_files():
         sc = load_scenario(path)
+        if not sc.data_path.exists():    # data/ryanair/ is made by make_ryanair_data.py
+            print(f"{sc.name:24s} skipped: no {sc.data_dir}/")
+            continue
         out = OUTPUT_DIR / path.parent.name
         figures = out / "figures"
         figures.mkdir(parents=True, exist_ok=True)

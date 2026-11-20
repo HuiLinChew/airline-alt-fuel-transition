@@ -439,3 +439,13 @@ def test_sequential_refuelling_adds_the_whole_refuel_time(data):
     assert (parallel.turn_min == 40).all()
     assert extra.between(10, 13).all()
     assert (sequential.xs("CH4-NB").turn_min == 40).all()
+
+
+def test_one_off_period_lets_aircraft_end_anywhere(data):
+    """A single one-way leg: a repeating day has no way to bring the aircraft back,
+    a one-off day just needs one aircraft."""
+    sc = load_scenario("baseline")
+    one_leg = replace(data, legs=data.legs.iloc[:1])
+    assert analysis.run(sc, one_leg).kpis["status"] not in analysis.SOLVED
+    r = analysis.run(replace(sc, repeat=False), one_leg)
+    assert r.kpis["aircraft"] == 1 and r.violations == []

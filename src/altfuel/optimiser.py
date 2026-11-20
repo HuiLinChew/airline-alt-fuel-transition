@@ -12,6 +12,7 @@ Sherali et al. 2006), with optional leg cancellation (Wu et al. 2025):
     balance    at every node, aircraft in = aircraft out
     count      n[k] = aircraft on the ground at the end of the period
                       + aircraft still flying or turning then;  n[k] <= fleet[k]
+               (if the period doesn't repeat: n[k] = aircraft at each station at the start)
     capacity   (constrain mode) runway movements per hour <= limit, aircraft at a station <= stands
     nights     (overnight_at_bases) at every midnight, no aircraft at or heading to
                an airport that isn't a base
@@ -61,6 +62,12 @@ def solve(net: Network, perf: pd.DataFrame, drop_cost: pd.Series, ownership: pd.
     for (k, s), times in net.nodes.items():
         for i in range(len(times)):
             g[k, s, i] = pulp.LpVariable(f"g_{k}_{s}_{i}", lowBound=0, cat="Integer")
+    # If the period doesn't repeat, aircraft at each station at the start (the morning
+    # doesn't follow on from the last night)
+    start = {}
+    if not sc.repeat:
+        for k, s in net.nodes:
+            start[k, s] = pulp.LpVariable(f"start_{k}_{s}", lowBound=0, cat="Integer")
 
     # Group the flight variables by leg and by the node they leave or reach
     by_leg = defaultdict(list)
@@ -76,32 +83,45 @@ def solve(net: Network, perf: pd.DataFrame, drop_cost: pd.Series, ownership: pd.
     for leg in y:
         model += pulp.lpSum(by_leg[leg]) + y[leg] == 1, f"cover_{leg}"
 
-    # Balance. g[k,s,i] is the ground arc from node i to node i+1; the last one wraps to node 0.
+    # Balance. g[k,s,i] is the ground arc from node i to node i+1; the last one wraps to
+    # node 0 (or, if the period doesn't repeat, node 0 starts with the aircraft there at the start).
     for (k, s), times in net.nodes.items():
         n = len(times)
         for i in range(n):
-            arriving = pulp.lpSum(reaching[k, s, i]) + g[k, s, i - 1 if i > 0 else n - 1]
+            if i > 0:
+                before = g[k, s, i - 1]
+            else:
+                before = g[k, s, n - 1] if sc.repeat else start[k, s]
+            arriving = pulp.lpSum(reaching[k, s, i]) + before
             departing = pulp.lpSum(leaving[k, s, i]) + g[k, s, i]
             model += arriving == departing, f"balance_{k}_{s}_{i}"
 
     # Count
     fleet_used = {}
     for k in F.type.unique():
-        on_ground = [g[k, s, len(times) - 1] for (kk, s), times in net.nodes.items() if kk == k]
+        if sc.repeat:
+            on_ground = [g[k, s, len(times) - 1] for (kk, s), times in net.nodes.items() if kk == k]
+        else:
+            on_ground = [start[kk, s] for kk, s in start if kk == k]
         in_air = [x[k, r.leg_id] for r in F[(F.type == k) & F.crosses].itertuples()]
         fleet_used[k] = pulp.lpSum(on_ground + in_air)
         model += fleet_used[k] <= sc.fleet.get(k, 0), f"count_{k}"
 
     # Overnight at bases: at every midnight in the period, no aircraft is on the ground
     # at, or still flying or turning towards, an airport that isn't a base
+    # (the start and end of a one-off period are left free)
     if sc.overnight_at_bases:
-        for midnight in range(0, net.period_min, 1440):
+        first_night = 0 if sc.repeat else 1440
+        for midnight in range(first_night, net.period_min, 1440):
             for (k, s), times in net.nodes.items():
                 if s not in net.bases:
                     # the ground arc from the last node before midnight (or the overnight arc)
                     before = [i for i, t in enumerate(times) if t < midnight]
-                    i = before[-1] if before else len(times) - 1
-                    model += g[k, s, i] == 0, f"no_night_{midnight}_{k}_{s}"
+                    if before:
+                        arc = g[k, s, before[-1]]
+                    else:
+                        arc = g[k, s, len(times) - 1] if sc.repeat else start[k, s]
+                    model += arc == 0, f"no_night_{midnight}_{k}_{s}"
             for r in F[~F.destination.isin(net.bases)].itertuples():
                 if busy_at(midnight, r):
                     model += x[r.type, r.leg_id] == 0, f"no_night_{midnight}_{r.type}_{r.leg_id}"

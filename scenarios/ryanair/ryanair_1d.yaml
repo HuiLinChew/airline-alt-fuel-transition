@@ -1,0 +1,10 @@
+# One real day of Ryanair flying (OpenSky, 14 Sep 2022), kerosene only.
+# Build the data first: uv run scripts/make_ryanair_data.py <flight list> 2022-09-14 1
+name: ryanair_1d
+description: Real Ryanair day (aircraft whose whole day is known), kerosene only, nights at a night stop
+data_dir: data/ryanair_1d
+objective: cost
+fleet: {KER-NB: 1000}   # no cap
+overnight_at_bases: true
+repeat: false           # real days: aircraft start and end where they really did
+capacity_mode: "off"    # no runway or stand data for these airports yet

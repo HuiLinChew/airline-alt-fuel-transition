@@ -69,6 +69,9 @@ Module 4 (fleet stock-flow) isn't built yet: for now the scenario just says how 
 |---|---|
 | `scripts/make_dummy_data.py` | Builds the dummy airports, legs and aircraft types from Hasan's raw data |
 | `scripts/run_scenarios.py` | Runs every scenario and saves results and figures |
+| `scripts/run_one.py` | Runs one scenario, prints its results, saves its map and schedule |
+| `scripts/make_ryanair_data.py` | Cleans a month of OpenSky flights (`data/ryanair/flights_clean.csv`) and builds the model inputs for a stretch of real Ryanair days; not in git |
+| `scripts/compare_ryanair.py` | Model vs what Ryanair really flew: aircraft, flights and block hours per aircraft, aircraft per base, and how often the model's aircraft fly the same next flight |
 | `tests/test_model.py` | `uv run pytest`. Basic behaviour, input checks, and checks that the answers are physically right (shifting the timetable, a repeated week, brute force on a small network) |
 
 ## Scenario settings
@@ -97,6 +100,7 @@ A scenario YAML only lists what differs from these defaults.
 | `delay_step_min` | 10 | Step between allowed delays (0, 10, 20 … min) |
 | `overnight_at_bases` | false | Every aircraft spends the night at a base (any base in `airports.csv`) |
 | `period_min` | 1440 | 1440 for a day, 10080 for a week |
+| `repeat` | true | The period repeats (last night joins the first morning). `false`: a one-off stretch of days (the Ryanair data): aircraft start and end it anywhere, every night in between must work. The capacity check assumes a repeating period |
 | `solver` | 60 s, gap 0 | `time_limit_s`, `mip_gap`, `msg` |
 | `sweep` | | `{parameter: ..., values: [...]}` to re-run across values |
 

@@ -20,6 +20,8 @@ uv run scripts/run_scenarios.py   # run all scenarios, write outputs/
 uv run pytest                     # model checks
 ```
 
+Step-by-step (installing, running one scenario, your own scenarios, the Ryanair day): `docs/running.md`.
+
 ## Model
 
 A basic fleet assignment model (Hane et al. 1995, via Sherali et al. 2006) on a
@@ -97,3 +99,24 @@ Scenarios sit in one folder per timetable (`scenarios/out_and_back/`, `chains/`,
   every night; the Gantt chart shows the whole week.
 - The drop, spill and capacity results only show the mechanisms work: crew and
   maintenance costs and the airline's capacity share are still placeholders.
+
+## Real network: Ryanair (September 2022)
+
+`scripts/make_ryanair_data.py` builds real days of Ryanair flying from the OpenSky flight list
+(Zenodo, 2019–2022) and saves the cleaned month as `data/ryanair/flights_clean.csv` (not in git,
+non-commercial licence). Cleaning: missing airports from where the aircraft was seen (or its
+previous or next flight), neighbouring-airfield mix-ups corrected (an aircraft lands where it
+next takes off), codes OurAirports doesn't know added, gate times estimated (taxi and climb
+added), missing flights added in gaps. The days are run as a one-off stretch (`repeat: false`):
+aircraft start and end where they really did, and every night in between is at a real night stop.
+
+| Stretch | Aircraft kept (of ~500) | Flights | Aircraft needed: Ryanair / model | Same next flight where only one aircraft was waiting |
+|---|---|---|---|---|
+| 1 day (14 Sep) | 406 (81%) | 2,355 | 406 / 402 | 100% |
+| 4 days (14–17 Sep) | 231 (46%) | 5,166 | 231 / 231 | 100% |
+
+Fewer aircraft have four complete days than one. Where several aircraft were waiting, any of
+them could take the next flight and the model has no reason to prefer one (Ryanair picks by
+crew and maintenance), so those turns can't be compared tail by tail (about half match).
+Ryanair's real rotations are one valid answer, so the model can't need more aircraft.
+Allowing 20-min turns keeps 433 aircraft (87%) on the one day. Passengers are 189 seats × 94%.

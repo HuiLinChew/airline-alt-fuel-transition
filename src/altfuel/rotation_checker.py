@@ -19,7 +19,8 @@ import pandas as pd
 from .data_layer import Data
 
 
-def build_rotations(data: Data, perf: pd.DataFrame, assign: pd.DataFrame, fleet_used: dict):
+def build_rotations(data: Data, perf: pd.DataFrame, assign: pd.DataFrame, fleet_used: dict,
+                    repeat=True):
     flown = assign[assign.type != "dropped"].join(data.legs).sort_values("dep_min")
     rows = []
     problems = []
@@ -49,7 +50,7 @@ def build_rotations(data: Data, perf: pd.DataFrame, assign: pd.DataFrame, fleet_
         needed, counted = len(first_station), fleet_used.get(ac_type, 0)
         if needed > counted:
             problems.append(f"{ac_type}: rotations need {needed} aircraft, the optimiser counted {counted}")
-        if Counter(first_station.values()) != Counter(last_station.values()):
+        if repeat and Counter(first_station.values()) != Counter(last_station.values()):
             problems.append(f"{ac_type}: aircraft end the day where the next day's flights don't start")
 
     columns = ["tail_id", "type", "leg_id", "origin", "destination", "dep_min", "arr_min",
